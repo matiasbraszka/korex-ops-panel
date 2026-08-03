@@ -34,7 +34,15 @@ const pendiente = (g) => (g.tarea === 'revisar' ? !g.revisado : !g.grabado);
 export default function GuionesTabScreen() {
   const nav = useNavigate();
   const { data: guiones, loading } = useAsync(() => api.guiones(), []);
-  const [intro, setIntro] = useState(() => { try { return !localStorage.getItem(WELCOME_KEY); } catch { return false; } });
+  // La bienvenida se ve una sola vez. Con `?guia=1` se puede volver a ver cuando
+  // se quiera — sirve para repasarla y para mostrársela a un cliente por encima
+  // del hombro, sin tener que borrarle nada del teléfono.
+  const [intro, setIntro] = useState(() => {
+    try {
+      if (new URLSearchParams(window.location.search).get('guia') === '1') return true;
+      return !localStorage.getItem(WELCOME_KEY);
+    } catch { return false; }
+  });
   const [grabMap, setGrabMap] = useState({});
 
   // Responsable de cada guión (inicial de quien graba). Una sola llamada con los ids.
@@ -47,7 +55,13 @@ export default function GuionesTabScreen() {
   const lista = Array.isArray(guiones) ? guiones : [];
 
   const cerrarIntro = () => {
-    try { localStorage.setItem(WELCOME_KEY, '1'); } catch { /* */ }
+    try {
+      localStorage.setItem(WELCOME_KEY, '1');
+      // Sacar el ?guia=1 de la barra, si no al recargar vuelve a abrirse.
+      if (new URLSearchParams(window.location.search).get('guia') === '1') {
+        window.history.replaceState({}, '', window.location.pathname);
+      }
+    } catch { /* */ }
     setIntro(false);
   };
 
