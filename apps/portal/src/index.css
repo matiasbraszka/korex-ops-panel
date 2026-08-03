@@ -84,42 +84,44 @@ button { font-family: inherit; }
    Todos los keyframes comparten la misma línea de tiempo (los mismos
    porcentajes), así se ve como un solo movimiento y no como piezas sueltas. */
 @keyframes kxMarca {
-  0%,   6%   { background-size: 0% 82%;   background-image: linear-gradient(rgba(91,124,245,.30), rgba(91,124,245,.30)); }
-  18%, 26%   { background-size: 38% 82%;  background-image: linear-gradient(rgba(91,124,245,.30), rgba(91,124,245,.30)); }
-  38%, 68%   { background-size: 100% 82%; background-image: linear-gradient(rgba(91,124,245,.30), rgba(91,124,245,.30)); }
-  72%, 100%  { background-size: 100% 82%; background-image: linear-gradient(rgba(234,179,8,.42), rgba(234,179,8,.42)); }
+  0%,   5%   { background-size: 0% 82%;   background-image: linear-gradient(rgba(91,124,245,.30), rgba(91,124,245,.30)); }
+  16%, 26%   { background-size: 38% 82%;  background-image: linear-gradient(rgba(91,124,245,.30), rgba(91,124,245,.30)); }
+  36%, 72%   { background-size: 100% 82%; background-image: linear-gradient(rgba(91,124,245,.30), rgba(91,124,245,.30)); }
+  76%, 100%  { background-size: 100% 82%; background-image: linear-gradient(rgba(234,179,8,.42), rgba(234,179,8,.42)); }
 }
 @keyframes kxTirador {
-  0%,   6%   { left: 0%;   opacity: 1; }
-  18%, 26%   { left: 38%;  opacity: 1; }
-  38%, 68%   { left: 100%; opacity: 1; }
-  72%, 100%  { left: 100%; opacity: 0; }
+  0%,   5%   { left: 0%;   opacity: 1; }
+  16%, 26%   { left: 38%;  opacity: 1; }
+  36%, 72%   { left: 100%; opacity: 1; }
+  76%, 100%  { left: 100%; opacity: 0; }
 }
-@keyframes kxTiradorIzq { 0%, 68% { opacity: 1; } 72%, 100% { opacity: 0; } }
+@keyframes kxTiradorIzq { 0%, 72% { opacity: 1; } 76%, 100% { opacity: 0; } }
 @keyframes kxBotonOn {
-  0%,  34%   { background: #fff; border-color: var(--mk-border); color: var(--mk-text3); }
-  40%, 70%   { background: var(--mk-blue-ops); border-color: var(--mk-blue-ops); color: #fff; }
-  74%, 100%  { background: #fff; border-color: var(--mk-border); color: var(--mk-text3); }
+  0%,  38%   { background: #fff; border-color: var(--mk-border); color: var(--mk-text3); }
+  44%, 74%   { background: var(--mk-blue-ops); border-color: var(--mk-blue-ops); color: #fff; }
+  78%, 100%  { background: #fff; border-color: var(--mk-border); color: var(--mk-text3); }
 }
 @keyframes kxDedo {
-  0%,  42%   { transform: scale(.4); opacity: 0; }
-  48%        { transform: scale(1);  opacity: 1; }
-  58%, 100%  { transform: scale(1.9); opacity: 0; }
+  0%,  46%   { transform: scale(.4); opacity: 0; }
+  52%        { transform: scale(1);  opacity: 1; }
+  62%, 100%  { transform: scale(1.9); opacity: 0; }
 }
 @keyframes kxCaja {
-  0%,  50%   { transform: translateY(120%); opacity: 0; }
-  57%, 68%   { transform: translateY(0);    opacity: 1; }
-  73%, 100%  { transform: translateY(120%); opacity: 0; }
+  0%,  52%   { transform: translateY(130%); opacity: 0; }
+  58%, 76%   { transform: translateY(0);    opacity: 1; }
+  81%, 100%  { transform: translateY(130%); opacity: 0; }
 }
-@keyframes kxEscribe { 0%, 58% { width: 0; } 67%, 100% { width: 100%; } }
-@keyframes kxCursor  { 0%, 57% { opacity: 0; } 58%, 67% { opacity: 1; } 68%, 100% { opacity: 0; } }
+/* La nota se escribe letra por letra: 19 pasos para 19 caracteres, y con tiempo
+   suficiente para leerla (antes duraba menos de un segundo y no se entendía). */
+@keyframes kxEscribe { 0%, 60% { width: 0; } 74%, 100% { width: 19ch; } }
+@keyframes kxCursor  { 0%, 59% { opacity: 0; } 60%, 76% { opacity: 1; } 77%, 100% { opacity: 0; } }
 @keyframes kxOk {
-  0%,  72%   { opacity: 0; transform: translateY(7px); }
-  78%, 93%   { opacity: 1; transform: translateY(0); }
+  0%,  80%   { opacity: 0; transform: translateY(7px); }
+  85%, 96%   { opacity: 1; transform: translateY(0); }
   100%       { opacity: 0; transform: translateY(0); }
 }
-@keyframes kxNumViejo { 0%, 70% { opacity: 1; } 74%, 100% { opacity: 0; } }
-@keyframes kxNumNuevo { 0%, 70% { opacity: 0; } 74%, 100% { opacity: 1; } }
+@keyframes kxNumViejo { 0%, 74% { opacity: 1; } 78%, 100% { opacity: 0; } }
+@keyframes kxNumNuevo { 0%, 74% { opacity: 0; } 78%, 100% { opacity: 1; } }
 
 /* Con "reducir movimiento" el demo se queda quieto en el final de la historia:
    la frase ya comentada, en amarillo, y el contador con el comentario nuevo. */

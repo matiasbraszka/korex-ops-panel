@@ -14,7 +14,7 @@ const WELCOME_KEY = 'korex_portal_guiones_bienvenida';
 
 // Duración del bucle del demo de "cómo comentar". Todas las piezas usan ESTE
 // valor: si se cambia acá, la historia entera sigue sincronizada.
-const DEMO = '8.4s';
+const DEMO = '11s';
 
 // Duración estimada de lectura (~2.4 palabras/seg) → "< 1 min" / "2:30 min".
 const durLabel = (palabras) => {
@@ -158,7 +158,7 @@ export default function GuionesTabScreen() {
       <div className="kxs" data-kx-plain="" style={{ height: '100%', overflowY: 'auto', boxSizing: 'border-box', background: 'linear-gradient(180deg, var(--mk-blue-bg2) 0%, var(--mk-bg-panel) 34%)', padding: '44px 20px 30px', animation: 'kxFade .25s ease' }}>
         <img src={logo} alt="Método Korex" style={{ height: 26, width: 'auto', display: 'block', marginBottom: 20 }} />
         <div style={{ fontFamily: "'Montserrat', sans-serif", fontSize: 26, fontWeight: 800, letterSpacing: '-0.03em', color: T.ink, lineHeight: 1.15, marginBottom: 10 }}>
-          Aquí viven tus guiones,<br />listos para leer y grabar.
+          Aquí viven tus guiones,<br />listos para leer, revisar y grabar.
         </div>
         <div style={{ fontSize: 15, lineHeight: 1.55, color: T.textSoft, marginBottom: 24 }}>Tres cosas y ya eres autónomo:</div>
 
@@ -233,7 +233,7 @@ export default function GuionesTabScreen() {
             </div>
 
             {/* El texto, con la marca que se estira y termina en amarillo */}
-            <div style={{ padding: '14px 15px 74px', fontSize: 13, lineHeight: 1.78, color: T.text3, fontWeight: 500 }}>
+            <div style={{ padding: '14px 15px 92px', fontSize: 13, lineHeight: 1.78, color: T.text3, fontWeight: 500 }}>
               Si estás cansado de{' '}
               <span className="kx-marca" style={{ position: 'relative', display: 'inline-block', backgroundImage: 'linear-gradient(rgba(91,124,245,.30),rgba(91,124,245,.30))', backgroundRepeat: 'no-repeat', backgroundPosition: 'left center', backgroundSize: '0% 82%', borderRadius: 3, color: T.textSoft, fontWeight: 600, animation: `kxMarca ${DEMO} ease-in-out infinite` }}>
                 perseguir a amigos y familiares
@@ -257,7 +257,7 @@ export default function GuionesTabScreen() {
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                 <div style={{ flex: 1, minWidth: 0, border: '1px solid var(--mk-border)', borderRadius: 8, padding: '5px 7px', display: 'flex', alignItems: 'center' }}>
-                  <span style={{ display: 'inline-block', overflow: 'hidden', whiteSpace: 'nowrap', fontSize: 11, color: T.text, animation: `kxEscribe ${DEMO} steps(22, end) infinite` }}>
+                  <span style={{ display: 'inline-block', overflow: 'hidden', whiteSpace: 'nowrap', fontSize: 11, color: T.text, animation: `kxEscribe ${DEMO} steps(19, end) infinite` }}>
                     Esto no lo digo así
                   </span>
                   <span style={{ width: 1.5, height: 12, background: 'var(--mk-blue-ops)', marginLeft: 1, animation: `kxCursor ${DEMO} steps(1, end) infinite` }} />
