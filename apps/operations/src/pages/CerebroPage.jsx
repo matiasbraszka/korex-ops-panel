@@ -7,12 +7,13 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { supabase } from '@korex/db';
 import {
   Brain, Save, Plus, Trash2, FileText, Link2, Upload, Trophy,
-  BookOpen, Lightbulb, ShieldCheck, FolderOpen, Loader2, GraduationCap, Gauge, MessageSquareHeart,
+  BookOpen, Lightbulb, ShieldCheck, FolderOpen, Loader2, GraduationCap, Gauge, MessageSquareHeart, Images,
 } from 'lucide-react';
 import ContextStatus from '../components/cerebro/ContextStatus';
 import BlueprintEditor from '../components/cerebro/BlueprintEditor';
 import WinnerCandidates from '../components/cerebro/WinnerCandidates';
 import FeedbackInbox from '../components/cerebro/FeedbackInbox';
+import InspirationBank from '../components/cerebro/inspiraciones/InspirationBank';
 
 const BLUE = '#5B7CF5';
 const rid = () => `mtm_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -169,11 +170,20 @@ const TABS = [
   { key: 'estado', label: 'Estado del agente', Icon: Gauge },
   { key: 'blueprint', label: 'Blueprint y Compliance', Icon: BookOpen },
   { key: 'ganadores', label: 'Ganadores y bitácora', Icon: Trophy },
+  { key: 'inspiraciones', label: 'Banco de inspiraciones', Icon: Images },
   { key: 'feedback', label: 'Feedback y mejoras', Icon: MessageSquareHeart },
 ];
 
+// La pestaña se refleja en la URL (?tab=…) para poder mandarle a alguien el link directo
+// a la galería, que es algo que se comparte.
+const TAB_VALIDOS = TABS.map((t) => t.key);
+const tabInicial = () => {
+  const t = new URLSearchParams(window.location.search).get('tab');
+  return TAB_VALIDOS.includes(t) ? t : 'capacitacion';
+};
+
 export default function CerebroPage() {
-  const [tab, setTab] = useState('capacitacion');
+  const [tab, setTab] = useState(tabInicial);
   const [subagents, setSubagents] = useState([]);
   const [selected, setSelected] = useState('general');
   const [material, setMaterial] = useState([]);
@@ -212,6 +222,15 @@ export default function CerebroPage() {
     loadMaterial(selected);
   };
 
+  // replaceState y no navigate: es la misma pantalla, no queremos ensuciar el historial
+  // con una entrada por cada pestaña que se toca.
+  const cambiarTab = (key) => {
+    setTab(key);
+    const url = new URL(window.location.href);
+    if (key === 'capacitacion') url.searchParams.delete('tab'); else url.searchParams.set('tab', key);
+    window.history.replaceState({}, '', url);
+  };
+
   const winners = useMemo(() => material.filter(m => m.kind === 'creativo_ganador'), [material]);
   const regular = useMemo(() => material.filter(m => m.kind !== 'creativo_ganador'), [material]);
 
@@ -228,7 +247,7 @@ export default function CerebroPage() {
         {TABS.map(t => {
           const active = tab === t.key;
           return (
-            <button key={t.key} onClick={() => setTab(t.key)} className="inline-flex items-center gap-1.5 py-2 px-3 text-[12.5px] font-semibold cursor-pointer border-b-2 -mb-px transition-colors" style={active ? { color: BLUE, borderColor: BLUE } : { color: '#6B7280', borderColor: 'transparent' }}>
+            <button key={t.key} onClick={() => cambiarTab(t.key)} className="inline-flex items-center gap-1.5 py-2 px-3 text-[12.5px] font-semibold cursor-pointer border-b-2 -mb-px transition-colors" style={active ? { color: BLUE, borderColor: BLUE } : { color: '#6B7280', borderColor: 'transparent' }}>
               <t.Icon size={14} /> {t.label}
             </button>
           );
@@ -238,6 +257,7 @@ export default function CerebroPage() {
       {tab === 'estado' && <ContextStatus subagentKey="anuncios" />}
       {tab === 'blueprint' && <BlueprintEditor />}
       {tab === 'ganadores' && <WinnerCandidates />}
+      {tab === 'inspiraciones' && <InspirationBank />}
       {tab === 'feedback' && <FeedbackInbox />}
 
       {tab === 'capacitacion' && (loading ? <div className="text-text3 text-center py-20">Cargando…</div> : (
