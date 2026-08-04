@@ -88,7 +88,11 @@ export default function ResourceLightbox({ r, onClose }) {
           {isVid && r.provider === 'bunny' ? (
             // Player de Bunny (streaming adaptativo, reproduce en cualquier navegador).
             <div style={{ width: 'min(92vw, 1100px)', aspectRatio: '16 / 9' }}>
-              <iframe src={`${r.public_url}?autoplay=true&preload=true`} loading="lazy" allow="accelerometer;gyroscope;autoplay;encrypted-media;picture-in-picture" allowFullScreen title={r.title} className="w-full h-full block border-none" />
+              {/* `fullscreen` va SÍ O SÍ dentro de allow: al declarar un allow propio, el
+                  atributo allowFullScreen solo no alcanza y Chrome bloquea el botón de
+                  pantalla completa del reproductor — se ve como que cae a "pantalla en
+                  pantalla" en vez de agrandarse. */}
+              <iframe src={`${r.public_url}?autoplay=true&preload=true`} loading="lazy" allow="accelerometer;gyroscope;autoplay;encrypted-media;picture-in-picture;fullscreen" allowFullScreen title={r.title} className="w-full h-full block border-none" />
             </div>
           ) : isVid ? (
             <video src={r.public_url} controls autoPlay playsInline className="max-w-[92vw] max-h-[80vh] block" />

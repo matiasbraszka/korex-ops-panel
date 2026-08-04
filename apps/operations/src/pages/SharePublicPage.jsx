@@ -133,8 +133,7 @@ function FolderShare({ data, name, onReload }) {
   const [busy, setBusy] = useState(null);   // {label, pct}
   const [done, setDone] = useState(0);
   const [borrando, setBorrando] = useState(null);   // id del recurso que se está borrando
-  const [preview, setPreview] = useState(null);     // recurso abierto a pantalla completa
-  const [playing, setPlaying] = useState(null);     // id del video que se está reproduciendo (uno a la vez)
+  const [preview, setPreview] = useState(null);     // recurso abierto en el visor grande
   const fileRef = useRef(null);
   const cancelRef = useRef(null);   // { canceled, tus } de la subida en curso
 
@@ -221,27 +220,25 @@ function FolderShare({ data, name, onReload }) {
                     {borrando === r.id ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />}
                   </button>
                 )}
-                {/* La imagen se ve y se abre a pantalla completa. Los videos NO se
-                    reproducen solos: se muestra un botón de play y recién al tocarlo
-                    se carga el reproductor (uno a la vez), para que no suenen todos
-                    juntos ni carguen 24 embeds de una. */}
+                {/* Todo se abre en el visor grande (ResourceLightbox), imágenes y videos por
+                    igual: en un cuadrito de 150 px no se ve nada y el botón de pantalla
+                    completa del reproductor no tiene lugar donde crecer.
+                    El video NO se embebe acá: la tarjeta es la miniatura de Bunny
+                    (storage_path), así se ve qué es cada uno sin cargar 24 reproductores. */}
                 <div className="aspect-[4/3] bg-[#F1F3F7] flex items-center justify-center overflow-hidden">
                   {r.kind === 'image' && r.public_url ? (
                     <img src={r.public_url} alt={r.title} loading="lazy" onClick={() => setPreview(r)}
                       className="w-full h-full object-cover cursor-zoom-in" />
-                  ) : r.kind === 'video' && r.public_url && playing === r.id ? (
-                    r.provider === 'bunny' ? (
-                      <iframe src={`${r.public_url}${r.public_url.includes('?') ? '&' : '?'}autoplay=true`} title={r.title}
-                        allow="accelerometer;gyroscope;autoplay;encrypted-media;picture-in-picture" allowFullScreen
-                        className="w-full h-full block border-none" />
-                    ) : (
-                      <video src={r.public_url} controls autoPlay playsInline className="w-full h-full object-cover" />
-                    )
                   ) : r.kind === 'video' && r.public_url ? (
-                    <button type="button" onClick={() => setPlaying(r.id)} title="Reproducir"
-                      className="w-full h-full flex items-center justify-center border-none cursor-pointer relative"
+                    <button type="button" onClick={() => setPreview(r)} title="Reproducir"
+                      className="w-full h-full flex items-center justify-center border-none cursor-pointer relative p-0 overflow-hidden"
                       style={{ background: 'linear-gradient(160deg,#22262E,#0F1116)' }}>
-                      <span className="w-12 h-12 rounded-full bg-white/20 flex items-center justify-center" style={{ backdropFilter: 'blur(4px)' }}>
+                      {r.storage_path && (
+                        <img src={r.storage_path} alt="" loading="lazy"
+                          onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                          className="absolute inset-0 w-full h-full object-cover" />
+                      )}
+                      <span className="relative w-12 h-12 rounded-full bg-black/45 flex items-center justify-center" style={{ backdropFilter: 'blur(4px)' }}>
                         <Play size={22} className="text-white" style={{ marginLeft: 2 }} />
                       </span>
                     </button>
