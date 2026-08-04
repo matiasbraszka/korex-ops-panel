@@ -6,6 +6,7 @@ import RichTextEditor from './RichTextEditor';
 import TagInput from './TagInput';
 import SharePicker from './SharePicker';
 import { sanitizeNoteHtml } from './sanitize';
+import { uploadNotaImagen } from './imagenes';
 import { NOTE_COLORS, NOTE_COLOR_KEYS, getNoteColor } from './colors';
 
 // Modal de crear/editar nota. Mismo patron que CrearInformeModal/CrearIdeaModal:
@@ -103,6 +104,9 @@ export default function CrearNotaModal({ open, onClose, note = null, startFullSc
 
   const authorId = note?.author_id || currentUser?.id;
 
+  // Subir imágenes desde la computadora (botón, Ctrl+V o arrastrándolas).
+  const subirImagen = (file) => uploadNotaImagen(currentUser?.id, file);
+
   return (
     <Modal
       open={open}
@@ -168,6 +172,8 @@ export default function CrearNotaModal({ open, onClose, note = null, startFullSc
                 value={bodyHtml}
                 onChange={setBodyHtml}
                 placeholder="Empezá a escribir…"
+                richTools
+                onUploadImage={subirImagen}
                 minHeight={Math.max(360, (typeof window !== 'undefined' ? window.innerHeight : 800) - 240)}
               />
               {error && (
@@ -241,7 +247,13 @@ export default function CrearNotaModal({ open, onClose, note = null, startFullSc
 
           <div>
             <label className="block text-[11px] font-semibold text-gray-500 mb-1">Contenido</label>
-            <RichTextEditor value={bodyHtml} onChange={setBodyHtml} placeholder="Empezá a escribir. Usá la barra de arriba para títulos, negritas y listas." />
+            <RichTextEditor
+              value={bodyHtml}
+              onChange={setBodyHtml}
+              richTools
+              onUploadImage={subirImagen}
+              placeholder="Empezá a escribir. Usá la barra de arriba para títulos, listas, tablas e imágenes."
+            />
           </div>
 
           <div>

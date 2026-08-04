@@ -1004,6 +1004,12 @@ function NotasView({ openCreateNota, openEditNota, openExpandNota }) {
         .rte-content li::marker { color: #111827; }
         .rte-content a  { color: #3B82F6; text-decoration: underline; }
         .rte-content u  { text-decoration: underline; }
+        .rte-content h4, .rte-content h5, .rte-content h6 { font-size: 12px; font-weight: 800; margin: 8px 0 3px; color: #6B7280; text-transform: uppercase; letter-spacing: .05em; }
+        .rte-content hr { border: none; border-top: 1px solid #E2E5EB; margin: 12px 0; }
+        .rte-content table { display: block; overflow-x: auto; max-width: 100%; border-collapse: collapse; margin: 8px 0; font-size: 12px; background: #fff; }
+        .rte-content td, .rte-content th { border: 1px solid #E2E5EB; padding: 6px 9px; vertical-align: top; min-width: 80px; }
+        .rte-content th { background: #F7F8FA; font-weight: 700; text-align: left; }
+        .rte-content img { max-width: 100%; height: auto; border-radius: 8px; margin: 8px 0; }
       `}</style>
     </div>
   );

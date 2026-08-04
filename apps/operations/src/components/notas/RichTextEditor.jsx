@@ -43,12 +43,19 @@ const TEXT_COLORS = [
 const isHeading = (el) => !!el && /^H[1-6]$/.test(el.tagName);
 const headingLevel = (el) => Number(el.tagName[1]);
 
-// `sanitize` permite reusar este editor con una whitelist mas ancha (ej: el DEL,
-// que trae tablas). Default = el de las notas, que NO cambia.
-// `delTools` agrega los botones del DEL (tabla · tamaño de letra · imagen · avatar).
+// `sanitize` permite reusar este editor con otra whitelist. Default = el de las notas.
+//
+// `richTools` = herramientas de documento (tamaño de letra · divisor · tabla · imagen),
+//   con los menús flotantes para editar tablas e imágenes. Las usan las notas y el DEL.
+// `delTools`  = todo lo anterior MÁS lo propio del DEL (botón de avatar). Implica richTools.
+//
 // `onInsertImage`/`onNewAvatar` son ganchos opcionales: si vienen, mandan (ej. abrir la
 // galería de Recursos); si no, el editor hace la versión simple (pegar link / plantilla).
-export default function RichTextEditor({ value, onChange, placeholder = 'Escribí acá…', minHeight = 180, sanitize = sanitizeNoteHtml, delTools = false, onInsertImage, onNewAvatar, noToolbar = false, onActive }) {
+// `onUploadImage(file) => url` habilita subir imágenes desde la computadora: por el
+// botón de imagen, pegando (Ctrl+V) o arrastrándolas al texto.
+export default function RichTextEditor({ value, onChange, placeholder = 'Escribí acá…', minHeight = 180, sanitize = sanitizeNoteHtml, delTools = false, richTools = false, onInsertImage, onNewAvatar, onUploadImage, noToolbar = false, onActive }) {
+  // El DEL trae todas las herramientas de documento; las notas piden solo estas.
+  const rich = delTools || richTools;
   const ref = useRef(null);
   const rootRef = useRef(null);
   const lastInjected = useRef(null);
@@ -292,17 +299,26 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Escrib�
     });
     // Los span/font que quedaron sin nada que aportar se desenvuelven.
     doc.body.querySelectorAll('span,font').forEach(sp => { if (!sp.attributes.length) sp.replaceWith(...sp.childNodes); });
-    // En el DEL: al pegar desde Google Docs/Word las imágenes llegan como <img>
-    // con URLs de Google que no cargan (salen "imágenes cualquiera") y cuelgan el
-    // editor. Se descartan al pegar; el texto y su estructura quedan intactos. Para
-    // poner una imagen a propósito está el botón de imagen / la galería de Recursos.
-    if (delTools) {
+    // Al pegar desde Google Docs/Word las imágenes llegan como <img> con URLs de
+    // Google que no cargan (salen "imágenes cualquiera") y cuelgan el editor. Se
+    // descartan al pegar; el texto y su estructura quedan intactos. Para poner una
+    // imagen a propósito está el botón de imagen (o pegarla / arrastrarla directo).
+    if (rich) {
       doc.body.querySelectorAll('img,figure,picture,svg,object,canvas,video,iframe').forEach(n => n.remove());
     }
     return sanitize(doc.body.innerHTML);
   };
 
   const handlePaste = (e) => {
+    // Captura de pantalla pegada con Ctrl+V (viene como archivo, no como HTML):
+    // se sube y se inserta como imagen, igual que en Google Docs.
+    const pegadas = archivosImagen(e.clipboardData?.files);
+    if (rich && onUploadImage && pegadas.length) {
+      e.preventDefault();
+      saveSelection();
+      subirEInsertar(pegadas[0]);
+      return;
+    }
     e.preventDefault();
     snapshot(true);
     const html = e.clipboardData?.getData('text/html');
@@ -490,6 +506,53 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Escrib�
     handleInput();
   };
 
+  // ── Imágenes desde la computadora ────────────────────────────────────────────
+  // Con `onUploadImage` (las notas lo pasan) se puede subir un archivo: por el botón
+  // de imagen, pegando una captura (Ctrl+V) o arrastrándola al texto.
+  const [subiendo, setSubiendo] = useState(false);
+  const archivosImagen = (files) => Array.from(files || []).filter(f => f.type?.startsWith('image/'));
+  const imgTag = (url, alt = '') =>
+    `<img src="${url.replace(/"/g, '&quot;')}" alt="${alt.replace(/"/g, '&quot;')}" style="max-width:100%;border-radius:8px;margin:8px 0" /><p></p>`;
+  const subirEInsertar = async (file, replaceEl = null) => {
+    if (!onUploadImage || !file) return;
+    setSubiendo(true);
+    try {
+      const url = await onUploadImage(file);
+      if (!url) throw new Error('no se recibió el link de la imagen');
+      if (replaceEl) {
+        mutarNodo(replaceEl, (c) => {
+          c.src = url;
+          c.classList.remove('rte-img-sel');
+          if (!c.getAttribute('class')) c.removeAttribute('class');
+        });
+        setImgSel(null);
+      } else {
+        insertHTML(imgTag(url, file.name || ''));
+      }
+    } catch (err) {
+      setDialog({ type: 'aviso', msg: 'No se pudo subir la imagen: ' + (err?.message || err) });
+    } finally {
+      setSubiendo(false);
+    }
+  };
+  const handleDrop = (e) => {
+    const arrastradas = archivosImagen(e.dataTransfer?.files);
+    if (!rich || !onUploadImage || !arrastradas.length) return;
+    e.preventDefault();
+    // El cursor va donde se soltó la imagen (si el navegador sabe decirlo).
+    const pos = document.caretRangeFromPoint?.(e.clientX, e.clientY);
+    if (pos && ref.current?.contains(pos.startContainer)) savedRange.current = pos;
+    else saveSelection();
+    subirEInsertar(arrastradas[0]);
+  };
+  // Archivo elegido desde el diálogo de imagen (botón "Subir desde la computadora").
+  const elegirArchivo = (file) => {
+    if (!file) return;
+    const replaceEl = dialog?.replaceEl || null;
+    setDialog(null);
+    subirEInsertar(file, replaceEl);
+  };
+
   // Tamaño de letra: agranda/achica el texto seleccionado (relativo, con span+style).
   // No abre diálogo: opera directo sobre la selección.
   const changeFontSize = (bigger) => {
@@ -614,8 +677,8 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Escrib�
   };
 
   const handleClick = (e) => {
-    // Selección de imagen (herramienta del DEL): click en la imagen → menú.
-    if (delTools && e.target.tagName === 'IMG' && ref.current?.contains(e.target)) {
+    // Selección de imagen: click en la imagen → menú de tamaño/reemplazar/quitar.
+    if (rich && e.target.tagName === 'IMG' && ref.current?.contains(e.target)) {
       e.preventDefault();
       if (imgSel?.el && imgSel.el !== e.target) imgSel.el.classList.remove('rte-img-sel');
       e.target.classList.add('rte-img-sel');
@@ -625,9 +688,9 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Escrib�
       return;
     }
     if (imgSel) cerrarImgSel();
-    // Celda de tabla (herramienta del DEL): click dentro de td/th → barra de tabla.
+    // Celda de tabla: click dentro de td/th → barra de tabla.
     // No frena el click: el cursor se ubica normal en la celda para escribir.
-    if (delTools) {
+    if (rich) {
       const cell = e.target.closest?.('td,th');
       if (cell && ref.current?.contains(cell)) posicionarTblSel(cell);
       else if (tblSel) setTblSel(null);
@@ -755,14 +818,14 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Escrib�
             </>
           )}
         </div>
-        {delTools && (<>
+        {rich && (<>
           <Divider />
           <Btn label="A−" title="Achicar la letra seleccionada" onClick={() => changeFontSize(false)} />
           <Btn label="A+" title="Agrandar la letra seleccionada" onClick={() => changeFontSize(true)} />
           <Btn Icon={Minus}     title="Divisor (línea horizontal)" onClick={() => exec('insertHorizontalRule')} />
           <Btn Icon={Table}     title="Insertar tabla" onClick={openTable} />
-          <Btn Icon={ImageIcon} title="Insertar imagen (por link o desde Recursos)" onClick={openImage} />
-          <Btn Icon={UserPlus}  title="Insertar un avatar (nombre + segmentación + descripción)" onClick={openAvatar} />
+          <Btn Icon={ImageIcon} title={onUploadImage ? 'Insertar imagen (subirla o pegar el link)' : 'Insertar imagen (por link o desde Recursos)'} onClick={openImage} />
+          {delTools && <Btn Icon={UserPlus} title="Insertar un avatar (nombre + segmentación + descripción)" onClick={openAvatar} />}
         </>)}
         <Divider />
         <Btn Icon={Link2}  title="Insertar link" onClick={addLink} />
@@ -782,12 +845,19 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Escrib�
         onKeyDown={handleKeyDown}
         onClick={handleClick}
         onFocus={handleFocus}
+        onDrop={handleDrop}
         data-placeholder={placeholder}
         className="rte-content py-2.5 pr-3 pl-7 text-[13px] font-sans outline-none text-gray-800 leading-relaxed"
         style={{ minHeight }}
       />
 
-      {/* Menú flotante de imagen: tamaño / reemplazar / quitar (herramienta del DEL). */}
+      {subiendo && (
+        <div className="absolute right-2 bottom-2 z-30 flex items-center gap-1.5 bg-white border border-[#E2E5EB] rounded-lg py-1 px-2 text-[11.5px] font-semibold text-[#4B5563]" style={{ boxShadow: '0 6px 18px rgba(10,22,40,.16)' }}>
+          <span className="w-2 h-2 rounded-full bg-[#2E69E0] animate-pulse" /> Subiendo imagen…
+        </div>
+      )}
+
+      {/* Menú flotante de imagen: tamaño / reemplazar / quitar. */}
       {imgSel && (
         <div className="absolute z-30 flex items-center gap-0.5 bg-white border border-[#E2E5EB] rounded-lg px-1 py-0.5" style={{ top: Math.max(2, imgSel.top), left: imgSel.left, boxShadow: '0 6px 18px rgba(10,22,40,.16)' }}
           onMouseDown={(e) => e.preventDefault()}>
@@ -802,7 +872,7 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Escrib�
         </div>
       )}
 
-      {/* Barra flotante de tabla: filas, columnas, ancho y borrar (herramienta del DEL). */}
+      {/* Barra flotante de tabla: filas, columnas, ancho y borrar. */}
       {tblSel && (
         <div className="absolute z-30 flex items-center gap-0.5 bg-white border border-[#E2E5EB] rounded-lg px-1 py-0.5 flex-wrap max-w-[calc(100%-16px)]" style={{ top: Math.max(2, tblSel.top), left: tblSel.left, boxShadow: '0 6px 18px rgba(10,22,40,.16)' }}
           onMouseDown={(e) => e.preventDefault()}>
@@ -852,8 +922,16 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Escrib�
 
             {dialog.type === 'image' && (<>
               <div className="text-[15px] font-bold text-[#1A1D26] mb-3.5">Insertar imagen</div>
-              <input type="url" value={dialog.url} autoFocus placeholder="https://…" onChange={(e) => setDialog({ ...dialog, url: e.target.value, err: null })} onKeyDown={(e) => { if (e.key === 'Enter') doImage(); }} className="w-full py-2.5 px-3 border border-[#E2E5EB] rounded-lg text-[13px] text-[#1A1D26] outline-none focus:border-[#2E69E0]" />
-              <div className="text-[11px] text-[#9098A4] mt-2">Pegá el link de la imagen. (La galería de Recursos viene después.)</div>
+              {onUploadImage && (
+                <label className="flex flex-col items-center justify-center gap-1 py-5 px-3 mb-3 border border-dashed border-[#C7D2FE] rounded-xl bg-[#F5F8FF] cursor-pointer hover:bg-[#EEF2FF]">
+                  <ImageIcon size={18} className="text-[#2E69E0]" />
+                  <span className="text-[12.5px] font-semibold text-[#2E69E0]">Subir desde la computadora</span>
+                  <span className="text-[11px] text-[#9098A4]">También podés pegarla (Ctrl+V) o arrastrarla al texto</span>
+                  <input type="file" accept="image/*" className="hidden" onChange={(e) => elegirArchivo(e.target.files?.[0])} />
+                </label>
+              )}
+              <input type="url" value={dialog.url} autoFocus={!onUploadImage} placeholder="https://…" onChange={(e) => setDialog({ ...dialog, url: e.target.value, err: null })} onKeyDown={(e) => { if (e.key === 'Enter') doImage(); }} className="w-full py-2.5 px-3 border border-[#E2E5EB] rounded-lg text-[13px] text-[#1A1D26] outline-none focus:border-[#2E69E0]" />
+              <div className="text-[11px] text-[#9098A4] mt-2">{onUploadImage ? 'O pegá acá el link de una imagen de internet.' : 'Pegá el link de la imagen. (La galería de Recursos viene después.)'}</div>
               {dialog.err && <div className="text-[11.5px] text-[#DC2626] mt-1.5">{dialog.err}</div>}
               <div className="flex justify-end gap-2 mt-4">
                 <button onClick={() => setDialog(null)} className="py-2 px-4 rounded-lg border border-[#E2E5EB] bg-white text-[#4B5563] text-[13px] font-semibold cursor-pointer">Cancelar</button>
@@ -889,8 +967,9 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Escrib�
         .rte-content li { margin: 2px 0; display: list-item; }
         .rte-content li::marker { color: #111827; }
         .rte-content a  { color: #3B82F6; text-decoration: underline; }
-        /* Tablas y h4-h6: solo aparecen en el DEL (las notas no los generan). */
+        /* Tablas, divisores y h4-h6: herramientas de documento (notas y DEL). */
         .rte-content h4, .rte-content h5, .rte-content h6 { font-size: 12px; font-weight: 800; margin: 8px 0 3px; color: #6B7280; text-transform: uppercase; letter-spacing: .05em; }
+        .rte-content hr { border: none; border-top: 1px solid #E2E5EB; margin: 14px 0; }
         .rte-content table { display: block; overflow-x: auto; max-width: 100%; border-collapse: collapse; margin: 8px 0; font-size: 12px; }
         .rte-content td, .rte-content th { border: 1px solid #E2E5EB; padding: 6px 9px; vertical-align: top; min-width: 80px; }
         .rte-content figure[data-drive-image] { margin: 8px 0; padding: 10px; border: 1px dashed #D0D5DD; border-radius: 8px; background: #F7F8FA; color: #9098A4; font-size: 11px; font-style: italic; text-align: center; }

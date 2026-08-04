@@ -1,12 +1,22 @@
 import DOMPurify from 'dompurify';
 
-// Whitelist intencionalmente estrecho. No permitimos <script>, <style>, <iframe>,
-// <img>, on* handlers, ni javascript: URLs. Las notas son texto formateado
-// (titulos, negrita, subrayado, listas, links). Cualquier otra cosa se descarta.
-const ALLOWED_TAGS = ['p', 'br', 'strong', 'b', 'em', 'i', 'u', 'h1', 'h2', 'h3', 'ul', 'ol', 'li', 'a', 'div', 'span', 'font'];
-// 'style'/'color' habilitan el color de letra. DOMPurify sanitiza el CSS de style
-// (descarta url()/expression()/javascript: peligrosos), así que es seguro.
-const ALLOWED_ATTR = ['href', 'target', 'rel', 'style', 'color'];
+// Las notas usan el MISMO editor que el DEL (documento tipo Google Docs), así que
+// el whitelist acompaña: además de texto formateado (títulos, negrita, listas,
+// links) entran tablas, imágenes y divisores.
+//
+// Sigue prohibido todo lo peligroso: <script>, <style>, <iframe>, atributos on*
+// y URLs javascript:. Cualquier otra cosa se descarta.
+const ALLOWED_TAGS = [
+  'p', 'br', 'strong', 'b', 'em', 'i', 'u', 'div', 'span', 'font',
+  'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+  'ul', 'ol', 'li', 'a', 'hr',
+  'table', 'thead', 'tbody', 'tr', 'td', 'th',
+  'figure', 'figcaption', 'img',
+];
+// 'style'/'color' habilitan el color de letra y las cajas. DOMPurify sanitiza el
+// CSS de style (descarta url()/expression()/javascript: peligrosos) y bloquea
+// javascript:/data: peligrosos en src, así que es seguro.
+const ALLOWED_ATTR = ['href', 'target', 'rel', 'style', 'color', 'colspan', 'rowspan', 'src', 'alt', 'width'];
 
 // Forzamos target/rel seguros en cualquier <a>.
 const enforceLinkSafety = (html) => {
