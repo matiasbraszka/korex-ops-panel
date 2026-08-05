@@ -1343,7 +1343,9 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, sibling
     emitir('section-add', {}); // que el DEL destino (y este) se refresquen
   };
 
-  // Importar una carpeta de Drive a los recursos (one-shot). Reusa la edge fn importar-drive.
+  // Importar de Drive a los recursos (one-shot): una carpeta entera o un archivo suelto.
+  // `folderUrl` se llama así por historia (antes solo aceptaba carpetas); la edge fn
+  // importar-drive resuelve sola si el link es carpeta o archivo.
   const ejecutarImportDrive = async () => {
     const url = (importUrl || '').trim();
     if (!url) return;
@@ -2517,13 +2519,13 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, sibling
               <div className="text-[15px] font-bold text-[#1A1D26] flex-1">Importar archivos de Drive</div>
               {!importBusy && <button onClick={() => setImportOpen(false)} className="w-7 h-7 inline-flex items-center justify-center rounded-lg text-[#9098A4] hover:bg-[#F4F5F7] border-none bg-transparent cursor-pointer"><X size={15} /></button>}
             </div>
-            <div className="text-[11.5px] text-[#9098A4] mb-3.5 leading-snug">Pegá el link de una carpeta de Drive y elegí dónde guardarla. Los videos se suben y se transcriben solos; los duplicados se saltean.</div>
+            <div className="text-[11.5px] text-[#9098A4] mb-3.5 leading-snug">Pegá el link de una carpeta de Drive —o de un archivo suelto— y elegí dónde guardarlo. Los videos se suben y se transcriben solos; los duplicados se saltean.</div>
 
             {!importRes?.ok ? (<>
-              <label className="block text-[12px] font-semibold text-[#6B7280] mb-1">Link de la carpeta de Drive</label>
+              <label className="block text-[12px] font-semibold text-[#6B7280] mb-1">Link de Drive (carpeta o archivo)</label>
               <input type="url" value={importUrl} autoFocus disabled={importBusy}
                 onChange={e => { setImportUrl(e.target.value); if (importRes?.error) setImportRes(null); }}
-                placeholder="https://drive.google.com/drive/folders/…"
+                placeholder="https://drive.google.com/file/d/… o /drive/folders/…"
                 className="w-full py-2.5 px-3 border border-[#E2E5EB] rounded-lg text-[13px] text-[#1A1D26] outline-none focus:border-[#0891B2] disabled:opacity-60" />
 
               <label className="block text-[12px] font-semibold text-[#6B7280] mt-3 mb-1">Carpeta destino</label>

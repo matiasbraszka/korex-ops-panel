@@ -1,5 +1,6 @@
 // supabase/functions/importar-drive/index.ts
-// Importador ÚNICO (one-shot) de una carpeta PÚBLICA de Drive → recursos de la plataforma.
+// Importador ÚNICO (one-shot) de Drive → recursos de la plataforma. Acepta el link de una
+// CARPETA (baja todo lo que tenga) o de UN ARCHIVO suelto (un video, una imagen, un PDF).
 // Lo dispara el botón "Importar de Drive" del editor del DEL. NO conecta el DEL a Drive:
 // lista la carpeta una vez, baja los archivos y crea las filas en funnel_resources.
 //
@@ -38,15 +39,35 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const safe = (s: string) => String(s || "archivo").normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 80);
 const titleOf = (s: string) => String(s || "Archivo").replace(/\.[^.]+$/, "");
 
-// Extrae el ID de carpeta de cualquier link de Drive (mismo parser que drive-sync).
-function driveId(url: string): string {
+// Extrae el ID de un link de Drive y, cuando el link lo dice, si es carpeta o archivo.
+// El link de un archivo suelto (…/file/d/<id>/view) trae el ID igual que el de una
+// carpeta; antes se trataba todo como carpeta y listar un archivo como carpeta no
+// devuelve nada, así que el importador terminaba "bien" con cero archivos.
+// "desconocido" se resuelve preguntándole a Drive por el tipo (driveMeta).
+type DriveRef = { id: string; tipo: "folder" | "file" | "desconocido" };
+function driveRef(url: string): DriveRef {
   const s = String(url || "").trim();
-  let m = s.match(/\/folders\/([A-Za-z0-9_-]+)/); if (m) return m[1];
-  m = s.match(/\/d\/([A-Za-z0-9_-]+)/); if (m) return m[1];
-  m = s.match(/[?&]id=([A-Za-z0-9_-]+)/); if (m) return m[1];
-  if (/^[A-Za-z0-9_-]{20,}$/.test(s)) return s;
-  return "";
+  let m = s.match(/\/folders\/([A-Za-z0-9_-]+)/); if (m) return { id: m[1], tipo: "folder" };
+  m = s.match(/\/file\/d\/([A-Za-z0-9_-]+)/); if (m) return { id: m[1], tipo: "file" };
+  m = s.match(/\/d\/([A-Za-z0-9_-]+)/); if (m) return { id: m[1], tipo: "desconocido" };
+  m = s.match(/[?&]id=([A-Za-z0-9_-]+)/); if (m) return { id: m[1], tipo: "desconocido" };
+  if (/^[A-Za-z0-9_-]{20,}$/.test(s)) return { id: s, tipo: "desconocido" };
+  return { id: "", tipo: "desconocido" };
 }
+
+// Ficha de un archivo/carpeta de Drive. Usa el mismo token del Apps Script que ya se
+// usa para bajar los archivos: no hace falta tocar el Apps Script para esto.
+// deno-lint-ignore no-explicit-any
+async function driveMeta(id: string, token: string): Promise<any | null> {
+  const r = await fetch(
+    `https://www.googleapis.com/drive/v3/files/${id}?fields=id,name,mimeType,size&supportsAllDrives=true`,
+    { headers: { Authorization: "Bearer " + token }, signal: AbortSignal.timeout(30000) },
+  );
+  if (!r.ok) { console.error("IMPDRIVE meta:", id, r.status); return null; }
+  return await r.json().catch(() => null);
+}
+
+const ES_CARPETA = "application/vnd.google-apps.folder";
 
 // deno-lint-ignore no-explicit-any
 async function appScript(url: string, payload: Record<string, unknown>): Promise<any> {
@@ -82,9 +103,9 @@ Deno.serve(async (req) => {
     const clientId = String(body.clientId || "");
     const strategyId = body.strategyId ? String(body.strategyId) : null;
     const bucketKey = String(body.bucketKey || "sin_clasif");
-    const folderId = driveId(String(body.folderUrl || ""));
+    const ref = driveRef(String(body.folderUrl || ""));
     if (!clientId) return json({ ok: false, error: "falta el cliente" });
-    if (!folderId) return json({ ok: false, error: "El link de Drive no es válido. Pegá el link de una CARPETA de Drive." });
+    if (!ref.id) return json({ ok: false, error: "El link de Drive no es válido. Pegá el link de una carpeta o de un archivo de Drive." });
 
     // 2) Token + árbol de la carpeta (Apps Script).
     const { data: cfg } = await sb.from("app_settings").select("value").eq("key", "venta_form_config").single();
@@ -95,14 +116,42 @@ Deno.serve(async (req) => {
     const TOKEN = tok?.token;
     if (!TOKEN) return json({ ok: false, error: "no se pudo obtener el acceso a Drive" });
 
-    const tree = await appScript(v.appscript_url, { secret: v.appscript_secret, action: "list_folder_tree", folderId });
+    // 2b) ¿Carpeta o archivo suelto? Si el link no lo dice, se le pregunta a Drive.
+    let esCarpeta = ref.tipo === "folder";
     // deno-lint-ignore no-explicit-any
-    const nodes = (tree?.nodes || []) as any[];
-    // Archivos reales: excluye carpetas y nativos de Google (Docs/Sheets/Slides no se bajan con alt=media).
-    const files = nodes.filter((n) => n.mimeType && !String(n.mimeType).startsWith("application/vnd.google-apps"));
+    let meta: any = null;
+    if (ref.tipo !== "folder") {
+      meta = await driveMeta(ref.id, TOKEN);
+      if (!meta?.id) {
+        return json({ ok: false, error: "No pude abrir ese link. Revisá que el archivo esté compartido (al menos 'cualquiera con el link')." });
+      }
+      esCarpeta = String(meta.mimeType || "") === ES_CARPETA;
+    }
+
+    // deno-lint-ignore no-explicit-any
+    let files: any[] = [];
+    if (esCarpeta) {
+      const tree = await appScript(v.appscript_url, { secret: v.appscript_secret, action: "list_folder_tree", folderId: ref.id });
+      // deno-lint-ignore no-explicit-any
+      const nodes = (tree?.nodes || []) as any[];
+      // Archivos reales: excluye carpetas y nativos de Google (Docs/Sheets/Slides no se bajan con alt=media).
+      files = nodes.filter((n) => n.mimeType && !String(n.mimeType).startsWith("application/vnd.google-apps"));
+    } else {
+      // Archivo suelto: un video, una imagen, un PDF… El resto del flujo es idéntico.
+      if (String(meta.mimeType || "").startsWith("application/vnd.google-apps")) {
+        return json({ ok: false, error: "Los documentos de Google (Docs, Sheets, Slides) no se pueden importar como archivo. Descargalo como PDF o video y subí ese link." });
+      }
+      files = [{ id: meta.id, name: meta.name, mimeType: meta.mimeType, size: meta.size ? Number(meta.size) : null }];
+    }
+
     const total = files.length;
     const lote = files.slice(0, MAX_FILES);
-    console.log("IMPDRIVE: folder", folderId, "archivos", total, "bucket", bucketKey);
+    console.log("IMPDRIVE:", esCarpeta ? "carpeta" : "archivo", ref.id, "archivos", total, "bucket", bucketKey);
+    if (!total) {
+      return json({ ok: false, error: esCarpeta
+        ? "Esa carpeta no tiene archivos que se puedan importar (los Docs, Sheets y Slides de Google no cuentan)."
+        : "Ese archivo no se puede importar." });
+    }
 
     // 3) Candado de gasto de Bunny (solo importa si hay videos). Comparte el tope con migrar-videos.
     const videos = lote.filter((n) => String(n.mimeType || "").startsWith("video/"));
