@@ -1,4 +1,10 @@
-// supabase/functions/agenda-publica/index.ts — v8
+// supabase/functions/agenda-publica/index.ts — v9
+// v9: la consulta de ocupación a Google Calendar (freebusy, vía Apps Script) se
+// cachea en booking_freebusy_cache. Era lo único lento de la función: 3 a 11 s
+// contra ~200 ms de todo lo demás, y se repetía en cada visita a la página.
+// Menos de 10 min se usa tal cual; entre 10 min y 6 h se devuelve al toque y se
+// refresca por atrás; más viejo, se consulta de nuevo. Reservar siempre pregunta
+// fresco, así que un hueco que se ocupó en el medio se rechaza al confirmar.
 // v8: el calendario se puede resolver por token permanente (public_token, link
 // que no cambia con el slug) además de por slug. Se guarda booking_tz (la zona
 // en que agendó el lead) para que confirmación y recordatorios salgan en SU
@@ -282,14 +288,12 @@ async function callCalendarScript(cfg: Cfg, payload: Record<string, unknown>) {
 }
 
 // Bloques ocupados de los Google Calendars reales de los miembros (freebusy).
-// Si el script falla, devuelve [] (degradar a bloqueos internos, no romper).
-async function googleBusy(cfg: Cfg, members: Member[], fromISO: string, toISO: string): Promise<Range2[]> {
-  const emails = members.map((m) => (m.email || "").trim().toLowerCase()).filter(Boolean);
-  if (!emails.length) return [];
+// Si el script falla, devuelve null (el llamador degrada a bloqueos internos).
+async function fetchFreebusy(cfg: Cfg, emails: string[], fromISO: string, toISO: string): Promise<Range2[] | null> {
   const res = await callCalendarScript(cfg, { action: "freebusy", emails, timeMin: fromISO, timeMax: toISO });
   if (!res?.ok) {
     console.error("agenda-publica: freebusy falló", res);
-    return [];
+    return null;
   }
   const out: Range2[] = [];
   for (const email of emails) {
@@ -305,11 +309,66 @@ async function googleBusy(cfg: Cfg, members: Member[], fromISO: string, toISO: s
   return out;
 }
 
+// Caché de la consulta de arriba (tabla booking_freebusy_cache). Es LO ÚNICO lento
+// de la función: Apps Script tarda entre 3 y 11 s, todo lo demás corre en ~200 ms.
+const FREEBUSY_FRESCO_MS = 10 * 60_000;      // se usa tal cual
+const FREEBUSY_SERVIBLE_MS = 6 * 3600_000;   // se devuelve YA y se refresca por atrás
+
+// Bloques ocupados, pasando por la caché salvo que se pida fresco (reservar).
+async function googleBusy(
+  cfg: Cfg,
+  members: Member[],
+  fromISO: string,
+  toISO: string,
+  opts: { fresh?: boolean } = {},
+): Promise<Range2[]> {
+  const emails = [...new Set(members.map((m) => (m.email || "").trim().toLowerCase()).filter(Boolean))].sort();
+  if (!emails.length) return [];
+  const key = `${emails.join(",")}|${fromISO}|${toISO}`;
+
+  const guardar = async (busy: Range2[]) => {
+    const { error } = await admin.from("booking_freebusy_cache")
+      .upsert({ cache_key: key, busy, fetched_at: new Date().toISOString() }, { onConflict: "cache_key" });
+    if (error) console.error("agenda-publica: no se pudo guardar la caché de freebusy", error);
+  };
+
+  if (!opts.fresh) {
+    const { data: row } = await admin.from("booking_freebusy_cache")
+      .select("busy, fetched_at").eq("cache_key", key).maybeSingle();
+    const edad = row ? Date.now() - new Date(row.fetched_at).getTime() : Infinity;
+    if (row && edad < FREEBUSY_FRESCO_MS) return row.busy as Range2[];
+    if (row && edad < FREEBUSY_SERVIBLE_MS) {
+      // Se devuelve lo guardado sin esperar a Google y se refresca por atrás. Un hueco
+      // que se ocupó en el medio se rechaza al confirmar (reservar revalida fresco),
+      // no se agenda encima.
+      try {
+        (globalThis as any).EdgeRuntime?.waitUntil?.((async () => {
+          const nuevo = await fetchFreebusy(cfg, emails, fromISO, toISO);
+          if (nuevo) await guardar(nuevo);
+        })());
+      } catch { /* sin waitUntil se refresca en la próxima visita */ }
+      return row.busy as Range2[];
+    }
+  }
+
+  const busy = await fetchFreebusy(cfg, emails, fromISO, toISO);
+  if (!busy) return [];
+  await guardar(busy);
+  return busy;
+}
+
 type Range2 = { s: number; e: number }; // epoch ms
 
 // Días y horarios libres de un mes para un calendario (descartando pasado,
 // citas internas que pisen a algún miembro y ocupados de Google Calendar).
-async function computeMonth(cfg: Cfg, cal: BookingCalendar, members: Member[], year: number, month: number) {
+async function computeMonth(
+  cfg: Cfg,
+  cal: BookingCalendar,
+  members: Member[],
+  year: number,
+  month: number,
+  opts: { fresh?: boolean } = {},
+) {
   const step = Math.max(15, Number(cal.duration_min) || 60);
   const first = new Date(Date.UTC(year, month, 1));
   const next = new Date(Date.UTC(year, month + 1, 1));
@@ -330,7 +389,7 @@ async function computeMonth(cfg: Cfg, cal: BookingCalendar, members: Member[], y
 
   const [{ data: taken }, gbusy] = await Promise.all([
     apptQ,
-    googleBusy(cfg, members, fromISO, toISO),
+    googleBusy(cfg, members, fromISO, toISO, opts),
   ]);
 
   const busy: Range2[] = (taken || []).map((a) => ({
@@ -473,10 +532,12 @@ Deno.serve(async (req: Request) => {
 
   const slug = typeof body.slug === "string" && /^[a-z0-9-]{1,60}$/.test(body.slug) ? body.slug : null;
   const token = typeof body.token === "string" && /^[A-Za-z0-9]{1,40}$/.test(body.token) ? body.token : null;
-  const cfg = await getCfg();
-  const cal = await getCalendar(slug, token);
-  const members = cal ? await getMembers(cal) : [];
-  const host = cal ? await getHost(cal) : null;
+  // En paralelo lo que no depende de nada, y después lo que necesita el calendario.
+  // Encadenadas eran cuatro idas y vueltas a la base antes de empezar a calcular.
+  const [cfg, cal] = await Promise.all([getCfg(), getCalendar(slug, token)]);
+  const [members, host] = cal
+    ? await Promise.all([getMembers(cal), getHost(cal)])
+    : [[] as Member[], null];
   const pub = cfg.public_agenda || {};
   const slotMin = Math.max(15, Number(cal?.duration_min) || 60);
   const configured = isConfigured(cal, members);
@@ -549,7 +610,8 @@ Deno.serve(async (req: Request) => {
     // citas internas y el freebusy fresco de los Google Calendars).
     const slotDate = toUTC(date, time);
     const [yy, mm] = date.split("-").map(Number);
-    const dayMap = await computeMonth(cfg, cal, members, yy, mm - 1);
+    // fresh: reservar NUNCA usa la caché de freebusy — se pregunta a Google de nuevo.
+    const dayMap = await computeMonth(cfg, cal, members, yy, mm - 1, { fresh: true });
     if (!(dayMap[date] || []).includes(time)) return jsonResp(409, { error: "slot_taken" });
 
     const waJid = `${waDigits}@s.whatsapp.net`;
