@@ -279,9 +279,14 @@ export default function FunnelResourceFolder({ strategyId, clientId, avatarId, b
   const resolveDragIds = (id) => (selected.has(id) && selected.size > 1) ? Array.from(selected) : [id];
   // Ámbito: 'funnel' (por avatar, dentro de una estrategia) o 'client' (categorías del
   // cliente, compartidas por todos sus funnels — strategy_id null).
+  // El scope de funnel lleva client_id además de la estrategia. Antes filtraba solo por
+  // strategy_id + avatar_id + version: si una estrategia quedara apuntando a otro cliente
+  // (pasó una vez con una carpeta de Drive compartida), esta carpeta mostraría material
+  // ajeno. Nombrar al cliente cuesta nada y es la diferencia entre una barrera y dos.
+  const clienteFiltro = clientId ? `&client_id=eq.${encodeURIComponent(clientId)}` : '';
   const scopeFilter = clientScope
     ? `client_id=eq.${encodeURIComponent(clientId)}&strategy_id=is.null&avatar_id=is.null`
-    : `strategy_id=eq.${encodeURIComponent(strategyId)}&${avatarId ? `avatar_id=eq.${encodeURIComponent(avatarId)}` : 'avatar_id=is.null'}&version=eq.${version}`;
+    : `strategy_id=eq.${encodeURIComponent(strategyId)}${clienteFiltro}&${avatarId ? `avatar_id=eq.${encodeURIComponent(avatarId)}` : 'avatar_id=is.null'}&version=eq.${version}`;
 
   const cargar = async () => {
     try {

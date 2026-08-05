@@ -67,13 +67,20 @@ export default function SaveToDel({ sel, subagentKey, text, label = 'Guardar en 
     setOpen(next);
     if (!next || secs !== null) return;
     try {
-      const { data: page } = await supabase.from('strategy_pages').select('del_doc_id,strategy_id').eq('id', sel.funnelId).maybeSingle();
+      // SIEMPRE por doc_id, y acotado por cliente. Antes había un `else if` que, cuando
+      // el funnel no tenía del_doc_id, listaba las secciones por strategy_id — la CARPETA
+      // de Drive, que pueden compartir dos funnels. Esa lista después se usaba para elegir
+      // a qué documento escribir (ver `guardar`), así que podía terminar guardando en el
+      // DEL equivocado. Si el funnel no tiene DEL, no hay lista: se crea uno nuevo.
+      const { data: page } = await supabase.from('strategy_pages')
+        .select('del_doc_id,strategy_id,client_id').eq('id', sel.funnelId).maybeSingle();
       let list = [];
       if (page?.del_doc_id) {
-        const { data } = await supabase.from('del_sections').select('id,title,kind,ord,doc_id').eq('doc_id', page.del_doc_id).order('ord');
-        list = data || [];
-      } else if (page?.strategy_id) {
-        const { data } = await supabase.from('del_sections').select('id,title,kind,ord,doc_id').eq('strategy_id', page.strategy_id).order('ord');
+        const { data } = await supabase.from('del_sections')
+          .select('id,title,kind,ord,doc_id')
+          .eq('doc_id', page.del_doc_id)
+          .eq('client_id', page.client_id || sel.clientId)
+          .order('ord');
         list = data || [];
       }
       setSecs(list);
@@ -88,8 +95,11 @@ export default function SaveToDel({ sel, subagentKey, text, label = 'Guardar en 
       if (target === 'new') {
         const { data: page } = await supabase.from('strategy_pages')
           .select('name,del_doc_id,strategy_id,client_id').eq('id', sel.funnelId).maybeSingle();
+        // El documento sale del funnel y de nadie más. Antes, si el funnel no tenía DEL,
+        // caía a `secs[0].doc_id` — el documento de la primera sección de una lista que
+        // venía sin verificar cliente. O sea: adivinaba, y podía escribir en el DEL de
+        // otro cliente. Si no hay DEL, se crea uno; nunca se hereda el de otro.
         let docId = page?.del_doc_id || null;
-        if (!docId && Array.isArray(secs) && secs[0]?.doc_id) docId = secs[0].doc_id;
         if (!docId) {
           const { data: newDoc, error: e1 } = await supabase.rpc('del_doc_create', {
             p_client_id: sel.clientId, p_strategy_id: sel.strategyId || page?.strategy_id || null, p_title: page?.name || 'DEL',

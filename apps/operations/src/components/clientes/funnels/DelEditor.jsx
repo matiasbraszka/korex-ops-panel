@@ -355,13 +355,24 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, sibling
   // Avatares del funnel (para asignar a qué avatar es cada guión de anuncios).
   const [avatarsFunnel, setAvatarsFunnel] = useState([]);
 
-  // Carga las secciones del DEL de ESTE funnel. Si el funnel tiene su DEL propio
-  // (docId, viene de del_doc_id), filtra por doc_id → ve SOLO su documento, aunque
-  // comparta carpeta con otro funnel. Si no, fallback por strategy_id (la carpeta),
-  // como antes. Esto además aísla el caso de dos "del" bajo la misma carpeta.
+  // Carga las secciones del DEL de ESTE funnel, SIEMPRE por doc_id (del_doc_id) y
+  // acotado además por client_id.
+  //
+  // Antes había un fallback: si el funnel no traía docId, filtraba por strategy_id —
+  // o sea por la CARPETA de Drive. Dos funnels pueden compartir carpeta, y una carpeta
+  // puede quedar apuntando a otro cliente, así que ese camino podía traer secciones
+  // ajenas. Hoy los 62 funnels tienen del_doc_id (verificado: 0 sin él), así que el
+  // fallback no aportaba nada y solo abría la puerta. Si algún día falta, es mejor
+  // mostrar el error que adivinar el documento.
+  //
+  // El client_id del filtro es defensa en profundidad: la base ya tiene una clave
+  // foránea compuesta que garantiza que doc y sección son del mismo cliente
+  // (migrations/del_v2_candado_cliente.sql), pero que la consulta también lo diga
+  // significa que hacen falta DOS fallas para filtrar algo, no una.
   const cargar = useCallback(async () => {
     try {
-      const filtro = docId ? `doc_id=eq.${docId}` : `strategy_id=eq.${strategyId}`;
+      if (!docId) { setErr('Este funnel no tiene un DEL asociado.'); setSecs([]); return; }
+      const filtro = `doc_id=eq.${docId}${clientId ? `&client_id=eq.${clientId}` : ''}`;
       const rows = await sbFetch(
         `del_sections?select=id,doc_id,client_id,ord,title,kind,text,html,char_count,source,version,status,para_grabar,orden_grabacion,accion_cliente,estado_seccion,grab_colab_id,grab_flujo,grab_flujo_at,grab_avatar_id,fase&${filtro}&order=ord.asc`,
         // cache:'no-store' -> el DEL SIEMPRE se trae fresco. Sin esto, el navegador
@@ -387,13 +398,18 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, sibling
           // Por defecto abre la sección de Estrategia (si existe); si no, la primera.
           setActiva((a) => a || (list.find((s) => s.kind === 'estrategia')?.id ?? list[0].id));
         }
-        setResolvedDoc((d) => d || list[0].doc_id);
-        setResolvedClient((c) => c || list[0].client_id);
       }
+      // La identidad del editor sale de las PROPS, nunca de los datos que llegaron.
+      // Antes era `d || list[0].doc_id` / `c || list[0].client_id`: el editor adoptaba
+      // el documento y el cliente de la primera fila recibida. Y resolvedDoc es el
+      // p_doc_id con el que agregar() y crearAvatarSection() CREAN secciones nuevas,
+      // así que una lectura contaminada se convertía en escrituras contaminadas.
+      setResolvedDoc(docId);
+      if (clientId) setResolvedClient(clientId);
     } catch (e) {
       setErr(String(e?.message || e));
     }
-  }, [strategyId, docId]);
+  }, [docId, clientId]);
 
   useEffect(() => {
     if (!aviso) return undefined;
@@ -751,13 +767,17 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, sibling
   // ── Comentarios del DEL ──────────────────────────────────────────────────────
   const cargarComments = useCallback(async () => {
     try {
-      // Mismo criterio que las secciones: por doc_id si el funnel tiene DEL propio,
-      // si no por strategy_id (la carpeta). Así los comentarios no se cruzan entre funnels.
-      const filtro = docId ? `doc_id=eq.${docId}` : `strategy_id=eq.${strategyId}`;
-      const rows = await sbFetch(`del_comments?select=id,section_id,body,quote,author_name,author_id,resolved,created_at,parent_id,guest_id&${filtro}&order=created_at.asc`, { cache: 'no-store' });
+      // Mismo criterio que las secciones: SIEMPRE por doc_id, nunca por strategy_id.
+      // Filtrar por la carpeta de Drive traía los comentarios de todos los funnels que
+      // la comparten. Verificado que ningún comentario depende del camino viejo (0 de 1
+      // sin doc_id), así que sacarlo no esconde nada.
+      // del_comments no tiene client_id, así que acá no hay segunda barrera posible:
+      // el aislamiento lo dan su RLS (is_team_member) y el doc_id.
+      if (!docId) { setComments([]); return; }
+      const rows = await sbFetch(`del_comments?select=id,section_id,body,quote,author_name,author_id,resolved,created_at,parent_id,guest_id&doc_id=eq.${docId}&order=created_at.asc`, { cache: 'no-store' });
       setComments(Array.isArray(rows) ? rows : []);
     } catch { /* si falla, sin comentarios */ }
-  }, [strategyId, docId]);
+  }, [docId]);
   useEffect(() => { cargarComments(); }, [cargarComments]);
 
   const comentar = async (section) => {
