@@ -4,6 +4,7 @@ import {
   fetchBookingCalendars, createBookingCalendar, updateBookingCalendar, fetchSoporteTeam,
 } from '../lib/api.js';
 import { initials as initialsOf, colorFromString } from '../lib/format.js';
+import CopiarHorario from './CopiarHorario.jsx';
 import TimeSelect from './TimeSelect.jsx';
 
 const DAY_NAMES = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
@@ -300,6 +301,15 @@ export default function CalendariosTab({ newSignal = 0, onConfigDisponibilidad, 
     const ranges = draft.availabilityDays[i].ranges.filter((_, j) => j !== idx);
     setAvailDay(i, { ranges, enabled: ranges.length ? draft.availabilityDays[i].enabled : false });
   };
+  // Copiar las franjas de un día a otros (los deja habilitados y pisa lo que tuvieran).
+  const copiarDia = (from, targets) => setDraft((d) => {
+    const next = { ...d.availabilityDays };
+    for (const t of targets) {
+      if (t === from) continue;
+      next[t] = { enabled: true, ranges: d.availabilityDays[from].ranges.map((r) => ({ ...r })) };
+    }
+    return { ...d, availabilityDays: next };
+  });
 
   const uniqueSlug = (name, ownId) => {
     const base = slugify(name) || 'calendario';
@@ -945,6 +955,10 @@ export default function CalendariosTab({ newSignal = 0, onConfigDisponibilidad, 
                                   className="h-8 px-2.5 rounded-lg border border-dashed border-[#D0D5DD] bg-transparent text-[11.5px] font-semibold text-text3 cursor-pointer hover:border-[#F5D9A8] hover:text-[#B45309] transition-colors">
                             + franja
                           </button>
+                        )}
+                        {d.ranges.length > 0 && (
+                          <CopiarHorario dayIndex={i} dayNames={DAY_NAMES} disabled={!isAdmin}
+                                         onCopy={(targets) => copiarDia(i, targets)} />
                         )}
                       </span>
                     ) : (

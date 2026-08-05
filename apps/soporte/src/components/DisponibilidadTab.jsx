@@ -3,6 +3,7 @@ import { Check, Plus, X } from 'lucide-react';
 import { fetchSoporteTeam, updateTeamMember } from '../lib/api.js';
 import { initials as initialsOf, colorFromString } from '../lib/format.js';
 import { hasAvailability } from './CalendariosTab.jsx';
+import CopiarHorario from './CopiarHorario.jsx';
 import TimeSelect from './TimeSelect.jsx';
 
 const DAY_NAMES = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
@@ -148,6 +149,15 @@ export default function DisponibilidadTab({ initialMemberId, isAdmin }) {
   const toggleDay = (i, on) => setDay(i, {
     enabled: on,
     ranges: on && !days[i].ranges.length ? [{ from: '09:00', to: '18:00' }] : days[i].ranges,
+  });
+  // Copiar las franjas de un día a otros (los deja habilitados y pisa lo que tuvieran).
+  const copiarDia = (from, targets) => setDays((prev) => {
+    const next = { ...prev };
+    for (const t of targets) {
+      if (t === from) continue;
+      next[t] = { enabled: true, ranges: prev[from].ranges.map((r) => ({ ...r })) };
+    }
+    return next;
   });
 
   const save = async () => {
@@ -298,6 +308,10 @@ export default function DisponibilidadTab({ initialMemberId, isAdmin }) {
                         + franja
                       </button>
                     )
+                  )}
+                  {d.ranges.length > 0 && (
+                    <CopiarHorario dayIndex={i} dayNames={DAY_NAMES} disabled={!isAdmin}
+                                   onCopy={(targets) => copiarDia(i, targets)} />
                   )}
                 </span>
               ) : (
