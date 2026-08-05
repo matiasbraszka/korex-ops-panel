@@ -418,9 +418,11 @@ export default function CalendariosTab({ newSignal = 0, onConfigDisponibilidad, 
   // seguimientos, textos) menos lo que identifica al calendario — id, dirección del
   // link y token permanente, que nacen nuevos.
   //
-  // Nace PAUSADO a propósito: un calendario recién copiado ya tiene link público vivo,
-  // y si arrancara activo podría recibir una reserva real antes de terminar de ajustarlo.
-  // Se prende con el mismo switch de siempre cuando está listo.
+  // La copia hereda el estado del original (activo → activa). La primera versión nacía
+  // pausada "por las dudas" y fue un error: agenda-publica filtra por active=true
+  // (supabase/functions/agenda-publica/index.ts:175), así que la página no mostraba
+  // horarios y no había forma de saber por qué. El link nuevo es aleatorio y no lo tiene
+  // nadie hasta que se comparte, o sea que no había riesgo real que justificara el paso extra.
   const duplicar = async () => {
     const base = draft?.id ? calendars.find((c) => c.id === draft.id) : null;
     if (!base) return;
@@ -436,7 +438,7 @@ export default function CalendariosTab({ newSignal = 0, onConfigDisponibilidad, 
         gcal_title_template: base.gcal_title_template,
         gcal_color_id: base.gcal_color_id,
         member_ids: [...(base.member_ids || [])],
-        active: false,
+        active: base.active,
         host_member_id: base.host_member_id,
         host_name: base.host_name,
         description: base.description,
@@ -652,6 +654,17 @@ export default function CalendariosTab({ newSignal = 0, onConfigDisponibilidad, 
           <div className={`flex flex-col gap-3 ${mobile ? '' : 'border border-surface2 rounded-[14px] p-4'}`}>
             {!mobile && <span className="text-[10px] font-bold tracking-[0.1em] text-text3">LINKS PARA COMPARTIR</span>}
             {mobile && <span className="text-[12px] font-semibold text-[#3D4659]">Links para compartir</span>}
+
+            {/* Pausado = la página pública no muestra ningún horario. Sin este aviso el
+                único indicio era la palabra "Pausado" en gris arriba, y el que abría el
+                link veía "no hay horarios publicados" sin entender por qué. */}
+            {!draft.active && (
+              <div className="rounded-[10px] border border-[#F5D9A8] bg-[#FFFBF2] px-3 py-2.5 text-[11.5px] text-[#B45309] leading-snug">
+                <b className="font-bold">Este calendario está pausado.</b> Quien abra estos links no va a ver
+                ningún horario, solo “Por ahora no hay horarios publicados”. Prendelo con el switch de arriba
+                {mobile ? '' : ' (a la derecha del nombre)'} para que empiece a recibir reservas.
+              </div>
+            )}
 
             {/* Link permanente */}
             <div className="flex flex-col gap-[5px]">
