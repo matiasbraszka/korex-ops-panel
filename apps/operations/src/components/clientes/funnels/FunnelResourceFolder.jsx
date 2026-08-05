@@ -12,6 +12,7 @@ import { FolderOpen, ChevronRight, Plus, Trash2, Play, Image as ImageIcon, Loade
 import ResourceLightbox from './ResourceLightbox';
 import BrandingGenerator from './BrandingGenerator';
 import { copyText } from '../recursosShared';
+import { ordenarVoomlyPorCliente } from '../voomlyMatch';
 import { publicOrigin } from '../../../utils/helpers';
 
 const BUCKET = 'funnel-recursos';
@@ -194,11 +195,21 @@ export default function FunnelResourceFolder({ strategyId, clientId, avatarId, b
 
   // ── Picker de Voomly por kind (ej. Testimonios): trae los videos ya cargados en
   //    vsl_voomly (los sube la corrida diaria) y al elegir uno guarda su link embed. ──
+  //    vsl_voomly no tiene client_id, así que la lista es de TODA la cuenta de Voomly (182
+  //    videos). Antes salían en orden de subida, o sea que los del cliente que estás mirando
+  //    podían quedar sepultados entre los de otros — de ahí el riesgo de pegar el video
+  //    equivocado. Ahora se ordenan por parecido con el nombre del cliente, igual que el
+  //    selector de VSL de FunnelsView. NO se esconde ninguno: sin client_id, filtrar por
+  //    nombre escondería el correcto cuando el nombre no coincide.
   const abrirPickerVoomly = async (r) => {
     setPickerFor(r); setPickerQ(''); setPickerRows(null);
     try {
-      const rows = await sbFetch(`vsl_voomly?select=voomly_id,name,kind,embed_id,total_plays,uploaded_at&kind=eq.${encodeURIComponent(voomlyKind)}&embed_id=not.is.null&order=uploaded_at.desc.nullslast`);
-      setPickerRows(Array.isArray(rows) ? rows : []);
+      const [rows, cli] = await Promise.all([
+        sbFetch(`vsl_voomly?select=voomly_id,name,kind,embed_id,total_plays,uploaded_at&kind=eq.${encodeURIComponent(voomlyKind)}&embed_id=not.is.null&order=uploaded_at.desc.nullslast`),
+        clientId ? sbFetch(`clients?select=name&id=eq.${encodeURIComponent(clientId)}`).catch(() => []) : Promise.resolve([]),
+      ]);
+      const nombreCliente = Array.isArray(cli) && cli[0]?.name ? cli[0].name : '';
+      setPickerRows(ordenarVoomlyPorCliente(Array.isArray(rows) ? rows : [], nombreCliente, label));
     } catch { setPickerRows([]); }
   };
   const elegirVoomly = (row) => {

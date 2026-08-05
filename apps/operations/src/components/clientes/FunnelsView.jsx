@@ -22,6 +22,7 @@ import FunnelResourceFolder from './funnels/FunnelResourceFolder';
 import DelEditor from './funnels/DelEditor';
 import { getCfgJump, clearCfgJump, getPanoramaReturn, clearPanoramaReturn } from './funnels/cfgJump';
 import { openUrl, copyText } from './recursosShared';
+import { normVoomly } from './voomlyMatch';
 
 // Metadatos por tipo de documento de contexto.
 const DOC_META = {
@@ -418,11 +419,6 @@ function ScriptPreview({ Icon, color, label, text, onOpen, emptyHint, locked, lo
   );
 }
 
-// Normaliza un nombre de video/cliente para matchear (sin extensión, sin "vsl", sin acentos).
-function normVoomly(s) {
-  return (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
-    .replace(/\.(mp4|mov|webm|m4v)$/i, '').replace(/\bvsl\b/g, ' ').replace(/[^a-z0-9]+/g, ' ').trim();
-}
 const voomlyUrl = (r) => (r?.embed_id ? `https://embed.voomly.com/b/${r.embed_id}` : '');
 
 // Selector de VSL de Voomly: cruza la tabla vsl_voomly (que no tiene client_id) por NOMBRE

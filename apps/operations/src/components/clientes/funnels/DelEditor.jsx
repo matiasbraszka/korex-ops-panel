@@ -354,6 +354,10 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, sibling
   const [asignables, setAsignables] = useState([{ id: '', nombre: 'Cliente' }]);
   // Avatares del funnel (para asignar a qué avatar es cada guión de anuncios).
   const [avatarsFunnel, setAvatarsFunnel] = useState([]);
+  // Cuántos funnels comparten la carpeta de Drive de este funnel. Si es >1, el borrado
+  // de una versión no puede tocar las grabaciones sin avatar (las del VSL), porque no
+  // hay forma de saber de cuál de los funnels son.
+  const [funnelsEnCarpeta, setFunnelsEnCarpeta] = useState(1);
 
   // Carga las secciones del DEL de ESTE funnel, SIEMPRE por doc_id (del_doc_id) y
   // acotado además por client_id.
@@ -462,25 +466,37 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, sibling
     if (error || !data?.ok) { window.alert('No pude asignar el responsable' + (data?.error ? ': ' + data.error : '')); await cargar(); }
   };
 
-  // Avatares del funnel (para el selector de avatar por guión de anuncios).
+  // Avatares de ESTE funnel, resueltos por su DEL.
+  //
+  // Antes preguntaba por strategy_id — la CARPETA de Drive — y FUSIONABA los avatares de
+  // todos los funnels que la comparten (el `vistos` de acá abajo era literalmente eso).
+  // O sea: en el selector de "a qué avatar es este guión" aparecían avatares de otro
+  // funnel del mismo cliente. del_doc_id tiene un índice único (del_v1), así que
+  // identifica un solo funnel sin ambigüedad.
+  //
+  // De paso guardo cuántos funnels comparten la carpeta: lo necesita el borrado de
+  // versiones para no llevarse grabaciones ajenas (ver borrarVersion).
   useEffect(() => {
-    if (!strategyId) return;
+    if (!docId) return undefined;
     let vivo = true;
     (async () => {
       try {
-        const rows = await sbFetch(`strategy_pages?select=avatars&strategy_id=eq.${strategyId}`);
+        const rows = await sbFetch(`strategy_pages?select=id,strategy_id,avatars&del_doc_id=eq.${docId}`);
         if (!vivo) return;
-        const vistos = new Map();
-        (Array.isArray(rows) ? rows : []).forEach((r) => {
-          (Array.isArray(r.avatars) ? r.avatars : []).forEach((a) => {
-            if (a?.id && !vistos.has(a.id)) vistos.set(a.id, a.name || a.id);
-          });
-        });
-        setAvatarsFunnel([...vistos].map(([id, name]) => ({ id, name })));
+        const mio = (Array.isArray(rows) ? rows : [])[0];
+        const avs = (Array.isArray(mio?.avatars) ? mio.avatars : [])
+          .filter((a) => a?.id)
+          .map((a) => ({ id: a.id, name: a.name || a.id }));
+        setAvatarsFunnel(avs);
+
+        if (mio?.strategy_id) {
+          const hermanos = await sbFetch(`strategy_pages?select=id&strategy_id=eq.${mio.strategy_id}`);
+          if (vivo) setFunnelsEnCarpeta(Array.isArray(hermanos) ? hermanos.length : 1);
+        }
       } catch { /* sin avatares */ }
     })();
     return () => { vivo = false; };
-  }, [strategyId]);
+  }, [docId]);
 
   // Asigna a qué avatar es un guión de anuncios (para que el cliente no lo elija al subir).
   const asignarAvatar = async (s, avatarId) => {
@@ -1386,7 +1402,24 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, sibling
     const { error } = await supabase.rpc('del_version_delete', { p_doc_id: resolvedDoc, p_version: v, p_by: by });
     if (error) { window.alert('No pude borrar la versión: ' + error.message); return; }
     // Borrar SOLO las grabaciones (videos crudos) de esa versión; las ediciones quedan intactas.
-    await supabase.from('funnel_resources').delete().eq('strategy_id', strategyId).eq('version', v).in('bucket_key', ['ad_rec', 'vsl_rec']);
+    //
+    // Esto borraba por strategy_id — la CARPETA de Drive — así que en un cliente con varios
+    // funnels en la misma carpeta se llevaba las grabaciones de funnels que no eran este.
+    // Ahora:
+    //   · los anuncios (ad_rec) se acotan a los avatares DE ESTE funnel;
+    //   · las del VSL (vsl_rec) no tienen avatar, así que no hay forma de saber de qué
+    //     funnel son: solo se borran si este funnel es el único de la carpeta.
+    const míos = avatarsFunnel.map((a) => a.id).filter(Boolean);
+    if (míos.length) {
+      await supabase.from('funnel_resources').delete()
+        .eq('client_id', clientId).eq('strategy_id', strategyId).eq('version', v)
+        .eq('bucket_key', 'ad_rec').in('avatar_id', míos);
+    }
+    if (funnelsEnCarpeta <= 1) {
+      await supabase.from('funnel_resources').delete()
+        .eq('client_id', clientId).eq('strategy_id', strategyId).eq('version', v)
+        .in('bucket_key', ['ad_rec', 'vsl_rec']).is('avatar_id', null);
+    }
     setActiveVersion(null);
     await cargar();
     emitir('section-add', {});
