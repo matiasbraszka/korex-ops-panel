@@ -21,7 +21,7 @@ const CATEGORIAS = [
   { kind: 'vsl', label: 'VSL' },
   { kind: 'anuncios', label: 'Anuncios' },
   { kind: 'pg_prelanding', label: 'Pre-landing' },
-  { kind: 'pg_landing', label: 'Landing' },
+  { kind: 'pg_landing', label: 'Landing VSL' },
   { kind: 'pg_formulario', label: 'Formulario' },
   { kind: 'pg_thankyou', label: 'Thank you' },
   { kind: 'pg_testimonios', label: 'Testimonios' },

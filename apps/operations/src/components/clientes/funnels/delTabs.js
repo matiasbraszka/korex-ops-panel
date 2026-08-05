@@ -8,7 +8,7 @@ export const SEC_BASE = {
   vsl:            { c: '#16A34A', bg: '#ECFDF5', label: 'VSL' },
   anuncios:       { c: '#5B7CF5', bg: '#EEF2FF', label: 'Anuncios' },
   pg_prelanding:  { c: '#8B5CF6', bg: '#F5F3FF', label: 'Pre-landing' },
-  pg_landing:     { c: '#8B5CF6', bg: '#F5F3FF', label: 'Landing' },
+  pg_landing:     { c: '#8B5CF6', bg: '#F5F3FF', label: 'Landing VSL' },
   pg_formulario:  { c: '#8B5CF6', bg: '#F5F3FF', label: 'Formulario' },
   pg_thankyou:    { c: '#8B5CF6', bg: '#F5F3FF', label: 'Thank you' },
   pg_testimonios: { c: '#8B5CF6', bg: '#F5F3FF', label: 'Testimonios' },
