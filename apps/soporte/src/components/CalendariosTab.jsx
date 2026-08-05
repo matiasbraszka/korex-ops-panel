@@ -231,6 +231,7 @@ export default function CalendariosTab({ newSignal = 0, onConfigDisponibilidad, 
   const [copiedKey, setCopiedKey] = useState('');
   const [error, setError] = useState('');
   const [mobileDetail, setMobileDetail] = useState(false);
+  const [duplicating, setDuplicating] = useState(false);
 
   useEffect(() => {
     Promise.all([fetchBookingCalendars(), fetchSoporteTeam()]).then(([cals, tm]) => {
@@ -413,6 +414,55 @@ export default function CalendariosTab({ newSignal = 0, onConfigDisponibilidad, 
     setError('');
   };
 
+  // Duplicar: copia TODA la configuración (equipo, horarios, preguntas, mensajes,
+  // seguimientos, textos) menos lo que identifica al calendario — id, dirección del
+  // link y token permanente, que nacen nuevos.
+  //
+  // Nace PAUSADO a propósito: un calendario recién copiado ya tiene link público vivo,
+  // y si arrancara activo podría recibir una reserva real antes de terminar de ajustarlo.
+  // Se prende con el mismo switch de siempre cuando está listo.
+  const duplicar = async () => {
+    const base = draft?.id ? calendars.find((c) => c.id === draft.id) : null;
+    if (!base) return;
+    setError('');
+    setDuplicating(true);
+    try {
+      const created = await createBookingCalendar({
+        slug: uniqueSlug(`${base.slug || base.name}-copia`),
+        name: `${base.name} (copia)`,
+        purpose: base.purpose,
+        purpose_color: base.purpose_color,
+        duration_min: base.duration_min,
+        gcal_title_template: base.gcal_title_template,
+        gcal_color_id: base.gcal_color_id,
+        member_ids: [...(base.member_ids || [])],
+        active: false,
+        host_member_id: base.host_member_id,
+        host_name: base.host_name,
+        description: base.description,
+        host_role: base.host_role,
+        questions: base.questions,
+        booking_window_days: base.booking_window_days,
+        min_notice_hours: base.min_notice_hours,
+        confirm_instructions: base.confirm_instructions,
+        availability: base.availability,
+        confirmation_template: base.confirmation_template,
+        reminders: base.reminders,
+      });
+      if (created?.id) {
+        setCalendars((prev) => [...prev, created]);
+        setSelId(created.id);
+        setDraft(draftFromCal(created));
+        setMobileDetail(true);
+      }
+    } catch (e) {
+      console.error('soporte: fallo la duplicación del calendario', e);
+      setError('No se pudo duplicar. ¿Tenés permiso de administrador?');
+    } finally {
+      setDuplicating(false);
+    }
+  };
+
   const toggleActive = async (on) => {
     set({ active: on });
     if (draft?.id) {
@@ -491,6 +541,13 @@ export default function CalendariosTab({ newSignal = 0, onConfigDisponibilidad, 
                 Ver página pública →
               </a>
             )}
+            {isAdmin && draft.id && (
+              <button onClick={duplicar} disabled={duplicating}
+                      title="Crea una copia con toda la configuración de este calendario, pausada y con su propio link"
+                      className="h-[26px] px-2.5 rounded-lg border border-border bg-white text-[11px] font-semibold text-text2 cursor-pointer hover:border-[#F5D9A8] hover:text-[#B45309] flex items-center gap-1.5 transition-colors duration-150 disabled:opacity-60">
+                <Copy size={12} /> {duplicating ? 'Duplicando…' : 'Duplicar'}
+              </button>
+            )}
             <span className="ml-auto flex items-center gap-2">
               <span className="text-[11px] font-semibold" style={{ color: draft.active ? '#15803D' : '#98A2B3' }}>
                 {draft.active ? 'Activo' : 'Pausado'}
@@ -508,6 +565,12 @@ export default function CalendariosTab({ newSignal = 0, onConfigDisponibilidad, 
             <a href={publicPath(draft.slug)} target="_blank" rel="noopener noreferrer"
                className="ml-auto text-[11px] font-semibold text-[#4A67D8] no-underline">Ver página pública →</a>
           </span>
+        )}
+        {mobile && isAdmin && draft.id && (
+          <button onClick={duplicar} disabled={duplicating}
+                  className="self-start h-9 px-3 rounded-[10px] border border-border bg-white text-[12.5px] font-semibold text-text2 cursor-pointer flex items-center gap-1.5 disabled:opacity-60">
+            <Copy size={13} /> {duplicating ? 'Duplicando…' : 'Duplicar este calendario'}
+          </button>
         )}
 
         {/* Datos generales */}
