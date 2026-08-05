@@ -40,7 +40,12 @@ const json = (b: unknown, s = 200) => new Response(JSON.stringify(b), { status: 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 // Nombre de archivo seguro para Storage; título = nombre sin extensión.
 const safe = (s: string) => String(s || "archivo").normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 80);
-const titleOf = (s: string) => String(s || "Archivo").replace(/\.[^.]+$/, "");
+// Título = nombre sin extensión, con los espacios normalizados. Sin normalizar, dos
+// archivos de Drive llamados "Anuncio 2 Korex" y "Anuncio 2 Korex " (con un espacio al
+// final) entraban como dos recursos distintos: el chequeo de duplicados compara el título
+// exacto y esos espacios no se ven en pantalla.
+const titleOf = (s: string) =>
+  String(s || "Archivo").replace(/\.[^.]+$/, "").replace(/\s+/g, " ").trim() || "Archivo";
 
 // Extrae el ID de un link de Drive y, cuando el link lo dice, si es carpeta o archivo.
 // El link de un archivo suelto (…/file/d/<id>/view) trae el ID igual que el de una
