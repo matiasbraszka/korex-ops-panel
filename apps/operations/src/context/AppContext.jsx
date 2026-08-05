@@ -687,19 +687,24 @@ export function AppProvider({ children }) {
   }, [save]);
 
   const updateClient = useCallback((id, updates) => {
-    // Aplicamos el cambio al state local INMEDIATO (optimistic).
-    let updated = null;
-    setClients(prev => {
-      const newClients = prev.map(c => c.id === id ? { ...c, ...updates } : c);
-      save(newClients, tasksRef.current);
-      updated = newClients.find(c => c.id === id);
-      return newClients;
-    });
+    // El cliente actualizado se arma ACÁ, no adentro del updater de setClients.
+    // Antes se asignaba `updated` dentro del updater y se lo usaba en la línea de
+    // abajo: React no garantiza correr ese updater de forma sincrónica (solo lo hace
+    // cuando el componente no tiene trabajo pendiente), así que con el proveedor
+    // ocupado `updated` quedaba en null, se salteaba el guardado y no saltaba ningún
+    // error. Se veía como "le doy a Guardar y no se guarda", sin aviso.
+    const base = (clientsRef.current || []).find(c => c.id === id);
+    if (!base) return Promise.resolve();
+    const updated = { ...base, ...updates };
+    const newClients = clientsRef.current.map(c => (c.id === id ? updated : c));
+    clientsRef.current = newClients;   // que dos guardados seguidos vean lo último
+    setClients(newClients);
+    save(newClients, tasksRef.current);
     // Devolvemos la promesa de persistencia en Supabase para que quien llame
     // pueda hacer await y mostrar feedback (spinner / check / error). Además,
     // avisamos si el guardado no llegó a la base (dbSaveClient devuelve null),
     // para que un cambio de cliente no falle en silencio.
-    if (updated && dbReady.current) {
+    if (dbReady.current) {
       return dbPatchClient(updated, updates).then(res => {
         if (res === null) flash('No se pudo guardar el cambio del cliente. Revisá tu conexión y volvé a intentar.');
         return res;

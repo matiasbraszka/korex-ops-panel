@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import { useApp } from '../../context/AppContext';
 import Modal from '../Modal';
-import { ExternalLink, Plus, Pencil, Trash2, Scale, AlertTriangle, Copy, Check, FileSignature, FileText } from 'lucide-react';
+import { ExternalLink, Plus, Pencil, Trash2, Scale, AlertTriangle, Copy, Check, FileSignature, FileText, EyeOff, Undo2 } from 'lucide-react';
 import { fmtDate, today, daysBetween } from '../../utils/helpers';
 
 // Pestaña "Contrato" del cliente (Operaciones). Antes era "Facturación"; lo financiero
@@ -56,7 +56,10 @@ function KorexCodeChip({ code }) {
 }
 
 // Una fila de contrato (DocuSign o manual).
-function ContractRow({ ct, onEdit, onDelete }) {
+// `onDiscard`/`onRestore` existen para los DOS tipos: los sobres de DocuSign no se
+// pueden borrar (el webhook los volvería a crear y se perdería el rastro de lo que
+// realmente pasó), pero sí sacarse de en medio cuando fueron una prueba.
+function ContractRow({ ct, onEdit, onDelete, onDiscard, onRestore }) {
   const isManual = ct.source === 'manual';
   const badge = isManual ? (MANUAL_STATUS[ct.status] || MANUAL_STATUS.vigente) : (CONTRACT_STATUS[ct.status] || { bg: '#F1F5F9', fg: '#94A3B8', label: ct.status });
   const title = isManual ? (ct.title || 'Contrato') : (ct.subject || 'Contrato (DocuSign)');
@@ -78,12 +81,19 @@ function ContractRow({ ct, onEdit, onDelete }) {
           </div>
         </div>
         <span className="inline-flex items-center py-[3px] px-[9px] rounded-full text-[10px] font-bold shrink-0" style={{ background: badge.bg, color: badge.fg }}>{badge.label}</span>
-        {isManual && (
-          <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+        <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+          {isManual && (
             <button className="w-6 h-6 rounded bg-transparent border-none cursor-pointer text-text3 hover:bg-blue-bg hover:text-blue inline-flex items-center justify-center" onClick={() => onEdit(ct)} title="Editar"><Pencil size={11} /></button>
+          )}
+          {ct.descartado ? (
+            <button className="w-6 h-6 rounded bg-transparent border-none cursor-pointer text-text3 hover:bg-blue-bg hover:text-blue inline-flex items-center justify-center" onClick={() => onRestore(ct)} title="Volver a contarlo como contrato del cliente"><Undo2 size={11} /></button>
+          ) : (
+            <button className="w-6 h-6 rounded bg-transparent border-none cursor-pointer text-text3 hover:bg-surface2 hover:text-text inline-flex items-center justify-center" onClick={() => onDiscard(ct)} title="Descartar: fue una prueba o un reenvío"><EyeOff size={11} /></button>
+          )}
+          {isManual && (
             <button className="w-6 h-6 rounded bg-transparent border-none cursor-pointer text-text3 hover:bg-red-bg hover:text-red-500 inline-flex items-center justify-center" onClick={() => { if (window.confirm('¿Borrar este contrato?')) onDelete(ct.id); }} title="Eliminar"><Trash2 size={11} /></button>
-          </div>
-        )}
+          )}
+        </div>
       </div>
       {(ct.pdf_url || warn) && (
         <div className="flex items-center justify-between gap-2 mt-2 pl-[42px] flex-wrap">
@@ -103,13 +113,17 @@ function ContractRow({ ct, onEdit, onDelete }) {
   );
 }
 
-function LegalCard({ c, clientContracts, onAdd, onEditManual, onDeleteManual, onEditData }) {
+function LegalCard({ c, clientContracts, onAdd, onEditManual, onDeleteManual, onEditData, onDiscard, onRestore }) {
+  const [verDescartados, setVerDescartados] = useState(false);
   // Orden: más nuevo arriba (por fecha de firma/renovación/creación).
   const sorted = [...clientContracts].sort((a, b) => {
     const ka = a.signed_date || a.completed_at || a.created_at || '';
     const kb = b.signed_date || b.completed_at || b.created_at || '';
     return kb.localeCompare(ka);
   });
+  // Los descartados (pruebas, reenvíos) no se pierden: bajan a su propio grupo.
+  const vigentes = sorted.filter(ct => !ct.descartado);
+  const descartados = sorted.filter(ct => ct.descartado);
 
   return (
     <div className="bg-white border border-[#E2E5EB] rounded-xl shadow-sm p-[18px]">
@@ -130,11 +144,36 @@ function LegalCard({ c, clientContracts, onAdd, onEditManual, onDeleteManual, on
         <div className="text-center text-[12px] py-4" style={{ color: '#9CA3AF' }}>
           Sin contratos. Se vinculan solos desde DocuSign, o tocá <b>Agregar</b> para subir un PDF.
         </div>
+      ) : vigentes.length === 0 ? (
+        <div className="text-center text-[12px] py-4" style={{ color: '#9CA3AF' }}>
+          Todos los contratos están descartados. Mirá abajo si alguno era el bueno.
+        </div>
       ) : (
         <div className="flex flex-col gap-2">
-          {sorted.map(ct => (
-            <ContractRow key={ct.id} ct={ct} onEdit={onEditManual} onDelete={onDeleteManual} />
+          {vigentes.map(ct => (
+            <ContractRow key={ct.id} ct={ct} onEdit={onEditManual} onDelete={onDeleteManual}
+              onDiscard={onDiscard} onRestore={onRestore} />
           ))}
+        </div>
+      )}
+
+      {/* Descartados: se guardan igual, pero no cuentan como el contrato del cliente. */}
+      {descartados.length > 0 && (
+        <div className="mt-2.5">
+          <button onClick={() => setVerDescartados(v => !v)}
+            className="inline-flex items-center gap-1.5 text-[11px] font-semibold bg-transparent border-none cursor-pointer p-0 hover:text-blue"
+            style={{ color: '#9CA3AF' }}>
+            <EyeOff size={11} />
+            {descartados.length} descartado{descartados.length === 1 ? '' : 's'} {verDescartados ? '▲' : '▼'}
+          </button>
+          {verDescartados && (
+            <div className="flex flex-col gap-2 mt-2 opacity-60">
+              {descartados.map(ct => (
+                <ContractRow key={ct.id} ct={ct} onEdit={onEditManual} onDelete={onDeleteManual}
+                  onDiscard={onDiscard} onRestore={onRestore} />
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -232,15 +271,34 @@ function ContractModal({ open, onClose, clientId, initial, addContract, updateCo
 }
 
 // Editar solo los "Datos para el contrato" (texto del cliente).
+// Espera a que el guardado llegue a la base antes de cerrar: antes cerraba al toque y,
+// si el guardado fallaba, no se enteraba nadie.
 function ContractDataModal({ open, onClose, client, updateClient }) {
   const [val, setVal] = useState(client.contractData || '');
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState('');
+  const guardar = async () => {
+    setSaving(true); setErr('');
+    try {
+      await updateClient(client.id, { contractData: val.trim() || null });
+      onClose();
+    } catch (e) {
+      console.warn('guardar datos del contrato', e);
+      setErr('No se pudo guardar. Revisá la conexión y probá de nuevo.');
+    } finally {
+      setSaving(false);
+    }
+  };
   if (!open) return null;
   return (
     <Modal open={open} onClose={onClose} title="Datos para el contrato" maxWidth={500}
       footer={
-        <div className="flex justify-end gap-2 w-full">
-          <button className="text-[12.5px] py-2 px-4 rounded-lg border border-[#E2E5EB] bg-white text-text2 font-medium cursor-pointer hover:bg-surface2" onClick={onClose}>Cancelar</button>
-          <button className="text-[12.5px] py-2 px-4 rounded-lg border-none bg-blue text-white font-semibold cursor-pointer hover:bg-blue-dark" onClick={() => { updateClient(client.id, { contractData: val.trim() || null }); onClose(); }}>Guardar</button>
+        <div className="flex items-center gap-2 w-full">
+          {err && <span className="text-[11.5px] font-medium text-red-500 flex-1">{err}</span>}
+          <div className="flex justify-end gap-2 ml-auto">
+            <button className="text-[12.5px] py-2 px-4 rounded-lg border border-[#E2E5EB] bg-white text-text2 font-medium cursor-pointer hover:bg-surface2" disabled={saving} onClick={onClose}>Cancelar</button>
+            <button className="text-[12.5px] py-2 px-4 rounded-lg border-none bg-blue text-white font-semibold cursor-pointer hover:bg-blue-dark disabled:opacity-50" disabled={saving} onClick={guardar}>{saving ? 'Guardando…' : 'Guardar'}</button>
+          </div>
         </div>
       }
     >
@@ -254,13 +312,23 @@ function ContractDataModal({ open, onClose, client, updateClient }) {
 }
 
 export default function ContratoTab({ client }) {
-  const { contracts, addContract, updateContract, deleteContract, updateClient } = useApp();
+  const { contracts, addContract, updateContract, deleteContract, updateClient, currentUser } = useApp();
   const clientContracts = useMemo(
     () => (contracts || []).filter(ct => ct.client_id === client.id),
     [contracts, client.id]
   );
   const [contractModal, setContractModal] = useState(null); // null | 'new' | contract obj
   const [dataModal, setDataModal] = useState(false);
+
+  const descartar = (ct) => updateContract(ct.id, {
+    descartado: true,
+    descartado_por: currentUser?.name || currentUser?.id || null,
+    descartado_at: new Date().toISOString(),
+  }).catch(e => { console.warn('descartar contrato', e); window.alert('No se pudo descartar el contrato.'); });
+
+  const restaurar = (ct) => updateContract(ct.id, {
+    descartado: false, descartado_por: null, descartado_at: null,
+  }).catch(e => { console.warn('restaurar contrato', e); window.alert('No se pudo restaurar el contrato.'); });
 
   return (
     <div className="mb-4" style={{ maxWidth: 640 }}>
@@ -271,6 +339,8 @@ export default function ContratoTab({ client }) {
         onEditManual={(ct) => setContractModal(ct)}
         onDeleteManual={deleteContract}
         onEditData={() => setDataModal(true)}
+        onDiscard={descartar}
+        onRestore={restaurar}
       />
 
       {contractModal && (

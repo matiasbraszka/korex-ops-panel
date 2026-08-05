@@ -175,7 +175,9 @@ export default function ClientDetail({ client: c }) {
         // estrategias (armar el set de sus ids y filtrar strategy_pages por ahi);
         // ahora el funnel sabe de que cliente es.
         const funnelsCount = (strategyPages || []).filter(p => p.client_id === c.id).length;
-        const contractsCount = (contracts || []).filter(ct => ct.client_id === c.id).length;
+        // Los descartados (pruebas, reenvíos) no cuentan: si no, la pestaña dice 3 y el
+        // cliente tiene un solo contrato de verdad.
+        const contractsCount = (contracts || []).filter(ct => ct.client_id === c.id && !ct.descartado).length;
         // Tareas asignadas al cliente (assignee contiene "cliente")
         const tabs = [
           { key: 'trabajo', label: 'Funnels', count: funnelsCount },
