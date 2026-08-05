@@ -14,8 +14,11 @@
 //   - Transcripción de videos: la hace sola transcribir-recursos (cron cada 20 min).
 //   - Título/avatar/grabado-editado: los afina organizar-videos (mismo flujo que los migrados).
 //
-// Body (POST JSON): { folderUrl, clientId, strategyId?, bucketKey }
+// Body (POST JSON): { folderUrl, clientId, strategyId?, bucketKey, avatarId?, version? }
 //   - strategyId presente  → recurso de ESE funnel.  strategyId null → carpeta GENERAL del cliente.
+//   - avatarId + version   → solo con strategyId: la carpeta de recursos de un funnel es
+//     (strategy_id + avatar_id + bucket_key + version). Sin esto, "Anuncios grabados del
+//     Avatar 1" caía en la carpeta del funnel sin avatar y no aparecía donde se lo esperaba.
 // Auth: JWT del usuario del panel (se verifica que sea un usuario logueado).
 // Secrets: SUPABASE_URL / SERVICE_ROLE_KEY / ANON_KEY, BUNNY_API_KEY, BUNNY_LIBRARY_ID, BUNNY_HOSTNAME.
 
@@ -103,6 +106,12 @@ Deno.serve(async (req) => {
     const clientId = String(body.clientId || "");
     const strategyId = body.strategyId ? String(body.strategyId) : null;
     const bucketKey = String(body.bucketKey || "sin_clasif");
+    // Una carpeta de recursos de un funnel es (strategy_id + avatar_id + bucket_key + version).
+    // El importador ignoraba avatar y versión: metía todo en la carpeta del funnel sin avatar,
+    // así que lo importado "para el Avatar 1" no aparecía ahí, y al reintentar lo daba por
+    // repetido (el chequeo de duplicados tampoco los miraba). Fuera de un funnel no aplican.
+    const avatarId = strategyId && body.avatarId ? String(body.avatarId) : null;
+    const version = strategyId ? Math.max(1, Number(body.version) || 1) : 1;
     const ref = driveRef(String(body.folderUrl || ""));
     if (!clientId) return json({ ok: false, error: "falta el cliente" });
     if (!ref.id) return json({ ok: false, error: "El link de Drive no es válido. Pegá el link de una carpeta o de un archivo de Drive." });
@@ -185,9 +194,16 @@ Deno.serve(async (req) => {
       const isImage = mime.startsWith("image/");
       const title = titleOf(n.name);
       try {
-        // Dedup: ya existe un recurso con ese título en la misma carpeta destino.
+        // Dedup: ya existe un recurso con ese título en la MISMA carpeta destino, que es
+        // la tupla completa (funnel + avatar + carpeta + versión). Antes miraba solo
+        // funnel + carpeta, así que el mismo video en otro avatar contaba como repetido.
         let q = sb.from("funnel_resources").select("id").eq("client_id", clientId).eq("bucket_key", bucketKey).eq("title", title).limit(1);
-        q = strategyId ? q.eq("strategy_id", strategyId) : q.is("strategy_id", null);
+        if (strategyId) {
+          q = q.eq("strategy_id", strategyId).eq("version", version);
+          q = avatarId ? q.eq("avatar_id", avatarId) : q.is("avatar_id", null);
+        } else {
+          q = q.is("strategy_id", null).is("avatar_id", null);
+        }
         const { data: exists } = await q;
         if (exists && exists.length) { dup++; continue; }
 
@@ -202,7 +218,7 @@ Deno.serve(async (req) => {
           const feBody = await fe.json().catch(() => ({}));
           if (!feBody?.success && !fe.ok) throw new Error("Bunny no pudo traer el video (" + fe.status + "): " + JSON.stringify(feBody).slice(0, 140));
           await sb.from("funnel_resources").insert({
-            strategy_id: strategyId, client_id: clientId, avatar_id: null, bucket_key: bucketKey,
+            strategy_id: strategyId, client_id: clientId, avatar_id: avatarId, bucket_key: bucketKey, version,
             title, provider: "bunny", kind: "video", bunny_id: guid,
             public_url: `https://iframe.mediadelivery.net/embed/${BUNNY_LIB}/${guid}`,
             storage_path: BUNNY_HOST ? `https://${BUNNY_HOST}/${guid}/thumbnail.jpg` : null,
@@ -220,7 +236,7 @@ Deno.serve(async (req) => {
           if (up.error) throw new Error("storage " + up.error.message);
           const pub = sb.storage.from(BUCKET).getPublicUrl(path).data.publicUrl;
           await sb.from("funnel_resources").insert({
-            strategy_id: strategyId, client_id: clientId, avatar_id: null, bucket_key: bucketKey,
+            strategy_id: strategyId, client_id: clientId, avatar_id: avatarId, bucket_key: bucketKey, version,
             title, provider: "supabase", storage_path: path, public_url: pub,
             mime_type: mime || "application/octet-stream", kind: isImage ? "image" : "other",
             size_bytes: buf.byteLength, created_by: userId,

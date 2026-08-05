@@ -103,10 +103,12 @@ function agruparImagenes(list) {
 }
 // Carpetas destino del importador de Drive (= bucket_key de funnel_resources).
 // scope 'funnel' → usa el strategy_id del funnel; 'cliente' → carpeta general (strategy_id null).
+// `avatar: true` = esa carpeta se abre por avatar (los anuncios se graban uno por avatar).
+// Las de VSL y testimonios son del funnel entero: ahí no se pregunta.
 const IMPORT_DESTINOS = [
   { grupo: 'De este funnel', opciones: [
-    { key: 'ad_rec', label: 'Anuncios — grabados', scope: 'funnel' },
-    { key: 'ad_edit', label: 'Anuncios — editados', scope: 'funnel' },
+    { key: 'ad_rec', label: 'Anuncios — grabados', scope: 'funnel', avatar: true },
+    { key: 'ad_edit', label: 'Anuncios — editados', scope: 'funnel', avatar: true },
     { key: 'vsl_rec', label: 'VSL — grabados', scope: 'funnel' },
     { key: 'vsl_edit', label: 'VSL — editados', scope: 'funnel' },
     { key: 'testimonios', label: 'Testimonios', scope: 'funnel' },
@@ -298,6 +300,7 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, sibling
   const [importOpen, setImportOpen] = useState(false);
   const [importUrl, setImportUrl] = useState('');
   const [importBucket, setImportBucket] = useState('ad_rec');
+  const [importAvatar, setImportAvatar] = useState('');
   const [importBusy, setImportBusy] = useState(false);
   const [importRes, setImportRes] = useState(null);
   const [activeVersion, setActiveVersion] = useState(null); // versión del funnel que se está viendo (null = la última)
@@ -497,6 +500,19 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, sibling
     })();
     return () => { vivo = false; };
   }, [docId]);
+
+  // Las carpetas de anuncios se abren por avatar. Al abrir el importador se propone el
+  // primero (es lo normal) en vez de dejarlo vacío: sin avatar, lo importado cae en la
+  // carpeta del funnel y no aparece donde uno lo fue a buscar.
+  useEffect(() => {
+    if (!importOpen) return;
+    const opt = IMPORT_OPT(importBucket);
+    if (opt?.avatar && avatarsFunnel.length) {
+      setImportAvatar((a) => (avatarsFunnel.some((x) => x.id === a) ? a : avatarsFunnel[0].id));
+    } else {
+      setImportAvatar('');
+    }
+  }, [importOpen, importBucket, avatarsFunnel]);
 
   // Asigna a qué avatar es un guión de anuncios (para que el cliente no lo elija al subir).
   const asignarAvatar = async (s, avatarId) => {
@@ -1355,7 +1371,13 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, sibling
     setImportBusy(true); setImportRes(null);
     try {
       const { data, error } = await supabase.functions.invoke('importar-drive', {
-        body: { folderUrl: url, clientId, strategyId: esFunnel ? strategyId : null, bucketKey: importBucket },
+        body: {
+          folderUrl: url, clientId, strategyId: esFunnel ? strategyId : null, bucketKey: importBucket,
+          // La carpeta destino es (funnel + avatar + tipo + versión). Si no va el avatar,
+          // lo importado "para el Avatar 1" cae en la carpeta del funnel y no se ve ahí.
+          avatarId: (esFunnel && opt?.avatar) ? (importAvatar || null) : null,
+          version: esFunnel ? verActiva : null,
+        },
       });
       if (error) setImportRes({ error: 'No se pudo importar. Revisá el link y probá de nuevo.' });
       else if (data && data.ok === false) setImportRes({ error: data.error || 'No se pudo importar.' });
@@ -2538,6 +2560,20 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, sibling
                 ))}
               </select>
 
+              {/* Avatar: solo para las carpetas que se abren por avatar (anuncios). Es lo que
+                  decide si el video aparece en "Avatar 1" o suelto en la carpeta del funnel. */}
+              {IMPORT_OPT(importBucket)?.avatar && avatarsFunnel.length > 0 && (
+                <>
+                  <label className="block text-[12px] font-semibold text-[#6B7280] mt-3 mb-1">¿De qué avatar?</label>
+                  <select value={importAvatar} disabled={importBusy} onChange={e => setImportAvatar(e.target.value)}
+                    className="w-full py-2.5 px-3 border border-[#E2E5EB] rounded-lg text-[13px] text-[#1A1D26] outline-none focus:border-[#0891B2] bg-white disabled:opacity-60">
+                    {avatarsFunnel.map(a => <option key={a.id} value={a.id}>👤 {a.name}</option>)}
+                    <option value="">Sin avatar — carpeta suelta del funnel</option>
+                  </select>
+                  <div className="text-[11px] text-[#9098A4] mt-1 leading-snug">Va a la Versión {verActiva} de este funnel.</div>
+                </>
+              )}
+
               {importRes?.error && <div className="text-[11.5px] text-[#DC2626] mt-2.5 leading-snug">{importRes.error}</div>}
 
               <div className="flex justify-end gap-2 mt-4">
@@ -2554,7 +2590,7 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, sibling
                 <div className="text-[12.5px] text-[#3F4653] leading-relaxed">
                   <b>{importRes.importados || 0}</b> recurso{(importRes.importados === 1) ? '' : 's'} importado{(importRes.importados === 1) ? '' : 's'}
                   {` (${importRes.videos || 0} video${importRes.videos === 1 ? '' : 's'}, ${importRes.imagenes || 0} imagen${importRes.imagenes === 1 ? '' : 'es'}${importRes.otros ? `, ${importRes.otros} otros` : ''}).`}
-                  {importRes.duplicados > 0 && <><br /><b>{importRes.duplicados}</b> saltado{importRes.duplicados === 1 ? '' : 's'} por estar repetido{importRes.duplicados === 1 ? '' : 's'}.</>}
+                  {importRes.duplicados > 0 && <><br /><b>{importRes.duplicados}</b> saltado{importRes.duplicados === 1 ? '' : 's'} porque ya estaba{importRes.duplicados === 1 ? '' : 'n'} en esa misma carpeta.</>}
                   {importRes.restantes > 0 && <><br />Quedan <b>{importRes.restantes}</b> archivo{importRes.restantes === 1 ? '' : 's'} sin procesar: volvé a importar la misma carpeta para seguir.</>}
                   {importRes.bunny === 'daily_cap' && <><br /><span className="text-[#B45309]">Se alcanzó el tope diario de gasto de video: los videos que faltan no se subieron.</span></>}
                   {importRes.bunny === 'frozen' && <><br /><span className="text-[#B45309]">La subida de video está en pausa por el candado de gasto: los videos no se subieron.</span></>}
