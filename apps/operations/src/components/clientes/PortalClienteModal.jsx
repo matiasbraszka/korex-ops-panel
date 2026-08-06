@@ -49,6 +49,7 @@ export default function PortalClienteModal({ client, onClose }) {
   const [collabToken, setCollabToken] = useState(null); // token del link de colaboradores
   const [collabs, setCollabs] = useState([]);           // colaboradores registrados
   const [grab, setGrab] = useState(null);               // resumen de grabaciones
+  const [funnelsOpen, setFunnelsOpen] = useState(null); // colaborador con el selector de embudos abierto
   const { strategyPages, updateStrategyPage } = useApp();
   const funnels = (strategyPages || []).filter((p) => p.client_id === client.id);
 
@@ -85,6 +86,20 @@ export default function PortalClienteModal({ client, onClose }) {
     if (!nuevo && !window.confirm(`¿Quitar el acceso de ${c.full_name || c.email}? No podrá entrar hasta que lo vuelvas a habilitar.`)) return;
     const { data } = await supabase.rpc('portal_collab_set_enabled', { p_id: c.id, p_enabled: nuevo });
     if (data?.ok) setCollabs((prev) => prev.map((x) => x.id === c.id ? { ...x, enabled: nuevo } : x));
+  };
+
+  // Qué embudos ve cada colaborador. Lista vacía = todos (es el default y el
+  // comportamiento de siempre: nadie pierde acceso por existir esta opción).
+  const guardarFunnelsCollab = async (c, ids) => {
+    setCollabs((prev) => prev.map((x) => x.id === c.id ? { ...x, funnel_ids: ids.length ? ids : null } : x));
+    const { data } = await supabase.rpc('portal_collab_set_funnels', { p_id: c.id, p_funnel_ids: ids });
+    if (!data?.ok) { window.alert('No se pudo guardar qué embudos ve.'); cargarCollab(); }
+  };
+  const toggleFunnelCollab = (c, funnelId) => {
+    const actuales = Array.isArray(c.funnel_ids) ? c.funnel_ids : [];
+    guardarFunnelsCollab(c, actuales.includes(funnelId)
+      ? actuales.filter((x) => x !== funnelId)
+      : [...actuales, funnelId]);
   };
 
   // Dar por hecho el onboarding de un cliente anterior al sistema (o deshacerlo).
@@ -347,6 +362,7 @@ export default function PortalClienteModal({ client, onClose }) {
           <div className="text-[11px] text-[#6B7280] leading-relaxed -mt-1">
             Compartí este enlace con el equipo del cliente (asistente, quien graba, etc.).
             Cada uno crea su cuenta y ve <b>lo mismo que el cliente</b>: onboarding, guiones y material.
+            Después podés acotar a cada uno a <b>embudos puntuales</b>.
           </div>
 
           <div className="flex items-center gap-1.5">
@@ -368,22 +384,59 @@ export default function PortalClienteModal({ client, onClose }) {
 
           {collabs.length > 0 && (
             <div className="flex flex-col">
-              {collabs.map((c) => (
-                <div key={c.id} className="flex items-center gap-2 py-1.5 border-t border-[#F1F3F7]">
-                  <div className="flex-1 min-w-0">
-                    <div className="text-[12px] font-semibold text-[#1A1D26] truncate">
-                      {c.full_name || c.email}
-                      <span className="ml-1.5 text-[9px] font-bold uppercase text-[#5B7CF5] bg-[#EEF2FF] rounded px-1 py-px">{c.role || 'Otro'}</span>
-                      {!c.enabled && <span className="ml-1.5 text-[9px] font-bold uppercase text-[#B45309] bg-[#FEF3C7] rounded px-1 py-px">sin acceso</span>}
+              {collabs.map((c) => {
+                const elegidos = Array.isArray(c.funnel_ids) ? c.funnel_ids : [];
+                const abierto = funnelsOpen === c.id;
+                return (
+                <div key={c.id} className="py-1.5 border-t border-[#F1F3F7]">
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1 min-w-0">
+                      <div className="text-[12px] font-semibold text-[#1A1D26] truncate">
+                        {c.full_name || c.email}
+                        <span className="ml-1.5 text-[9px] font-bold uppercase text-[#5B7CF5] bg-[#EEF2FF] rounded px-1 py-px">{c.role || 'Otro'}</span>
+                        {!c.enabled && <span className="ml-1.5 text-[9px] font-bold uppercase text-[#B45309] bg-[#FEF3C7] rounded px-1 py-px">sin acceso</span>}
+                      </div>
+                      <div className="text-[10px] text-[#AEB4BF] truncate">{c.email}{c.phone ? ` · ${c.phone}` : ''}</div>
                     </div>
-                    <div className="text-[10px] text-[#AEB4BF] truncate">{c.email}{c.phone ? ` · ${c.phone}` : ''}</div>
+                    <button onClick={() => toggleCollab(c)} title={c.enabled ? 'Quitar acceso' : 'Volver a dar acceso'}
+                      className={`inline-flex items-center justify-center w-7 h-7 rounded-md border bg-white cursor-pointer shrink-0 ${c.enabled ? 'border-[#E2E5EB] text-[#C3C9D4] hover:text-[#DC2626] hover:border-[#FECACA]' : 'border-[#BBF7D0] text-[#15803D] hover:bg-[#ECFDF5]'}`}>
+                      <Power size={13} />
+                    </button>
                   </div>
-                  <button onClick={() => toggleCollab(c)} title={c.enabled ? 'Quitar acceso' : 'Volver a dar acceso'}
-                    className={`inline-flex items-center justify-center w-7 h-7 rounded-md border bg-white cursor-pointer shrink-0 ${c.enabled ? 'border-[#E2E5EB] text-[#C3C9D4] hover:text-[#DC2626] hover:border-[#FECACA]' : 'border-[#BBF7D0] text-[#15803D] hover:bg-[#ECFDF5]'}`}>
-                    <Power size={13} />
-                  </button>
+
+                  {/* Qué embudos ve. Sin marcar ninguno = todos (lo de siempre). */}
+                  {funnels.length > 0 && (
+                    <div className="mt-1">
+                      <button onClick={() => setFunnelsOpen(abierto ? null : c.id)}
+                        className="inline-flex items-center gap-1 text-[10.5px] bg-transparent border-none cursor-pointer p-0 hover:text-[#2E69E0]"
+                        style={{ color: elegidos.length ? '#B45309' : '#AEB4BF' }}>
+                        <Film size={10} />
+                        {elegidos.length === 0
+                          ? 'Ve todos los embudos'
+                          : `Ve solo ${elegidos.length} de ${funnels.length} embudo${funnels.length === 1 ? '' : 's'}`}
+                        <span className="ml-0.5">{abierto ? '▲' : '▼'}</span>
+                      </button>
+                      {abierto && (
+                        <div className="mt-1 rounded-lg border border-[#E2E5EB] bg-[#FAFBFC] p-2 flex flex-col gap-1">
+                          {funnels.map((f) => (
+                            <label key={f.id} className="flex items-center gap-1.5 text-[11px] text-[#1A1D26] cursor-pointer">
+                              <input type="checkbox" className="cursor-pointer"
+                                checked={elegidos.includes(f.id)}
+                                onChange={() => toggleFunnelCollab(c, f.id)} />
+                              <span className="truncate">{f.name || f.id}</span>
+                            </label>
+                          ))}
+                          <div className="text-[10px] text-[#AEB4BF] leading-snug pt-0.5 border-t border-[#EEF0F4] mt-0.5">
+                            Sin marcar ninguno ve <b>todos</b>. Marcando alguno, ve el trabajo, los guiones
+                            y el avance <b>solo de esos</b>.
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
