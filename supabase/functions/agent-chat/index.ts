@@ -584,6 +584,50 @@ Deno.serve(async (req) => {
     return `Ganador ${i + 1}: ${str(w.ad_name) || "(sin nombre)"} — CPL ${str(w.cpl)} · hook ${str(w.hook_rate)} · hold ${str(w.hold_rate)} · CTR ${str(w.ctr)}${t ? `\nTranscript: ${t}` : ""}`;
   }).join("\n\n");
 
+  // Banco de ganadores CURADO A MANO (marketing_inspirations.es_ganador). Complementa a los de
+  // Meta: existe por NICHO, así que un cliente NUEVO sin historial igual recibe ganadores de su
+  // rubro. Prioriza los del propio cliente y matchea el nicho contra el slug/label del banco.
+  // Solo para el agente de anuncios: es su insumo directo (el copy que clona).
+  let bancoGanadores = "";
+  if (subagentKey === "anuncios") {
+    const nicheStrRaw = norm(str(client?.niche));
+    const { data: bankRows } = await supabase.from("marketing_inspirations")
+      .select("title,ad_copy,notes,metrics,activo_desde,activo_hasta,client_id,mime_type,niche_slug,marketing_niches(slug,label)")
+      .eq("es_ganador", true).is("deleted_at", null);
+    const fmtMet = (m: Record<string, unknown>) => {
+      const p: string[] = [];
+      if (m.cpl != null) p.push(`CPL US$${m.cpl}`);
+      if (m.hook_rate != null) p.push(`hook ${m.hook_rate}%`);
+      if (m.retencion_seg != null) p.push(`retención ${m.retencion_seg}s`);
+      if (m.ctr != null) p.push(`CTR ${m.ctr}%`);
+      if (m.frecuencia != null) p.push(`frec ${m.frecuencia}`);
+      if (m.cpm != null) p.push(`CPM US$${m.cpm}`);
+      return p.join(" · ");
+    };
+    const scored = (Array.isArray(bankRows) ? bankRows : [])
+      .map((r) => {
+        const niches = r.marketing_niches as { slug?: string; label?: string } | null;
+        const slug = norm(str(niches?.slug || r.niche_slug));
+        const lbl = norm(str(niches?.label));
+        let score = 0;
+        if (nicheStrRaw && ((slug && (nicheStrRaw.includes(slug) || slug.includes(nicheStrRaw))) ||
+                            (lbl && (nicheStrRaw.includes(lbl) || lbl.includes(nicheStrRaw))))) score += 5;
+        if (str(r.client_id) && str(r.client_id) === clientId) score += 3;
+        return { r, score };
+      })
+      // Sin copy no entrena a un agente de texto: si el video todavía no se transcribió, no entra.
+      .filter((x) => (str(x.r.ad_copy) || str(x.r.notes)) && x.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 3);
+    bancoGanadores = scored.map(({ r }, i) => {
+      const met = fmtMet((r.metrics || {}) as Record<string, unknown>);
+      const periodo = r.activo_desde ? ` · activo desde ${str(r.activo_desde)}${r.activo_hasta ? ` a ${str(r.activo_hasta)}` : ""}` : "";
+      const porque = str(r.notes) ? `\nPor qué ganó: ${clip(str(r.notes), 500)}` : "";
+      const copy = str(r.ad_copy) ? `\nCopy:\n${clip(str(r.ad_copy), 3000)}` : "\n(Video sin transcribir todavía: mirá las métricas y el porqué, el copy exacto no está.)";
+      return `Ganador ${i + 1}: ${str(r.title) || "(sin título)"}${met ? ` — ${met}` : ""}${periodo}${porque}${copy}`;
+    }).join("\n\n");
+  }
+
   // ── RETRIEVAL INTELIGENTE (biblioteca Korex, marketing_ad_library) ──
   // En vez de mandar las 200 páginas de ejemplos ni las 50 del blueprint, buscamos SOLO lo relevante
   // a este cliente/nicho/avatar y a lo que el usuario está pidiendo ahora. El resumen del método
@@ -996,7 +1040,12 @@ Deno.serve(async (req) => {
     // Los anuncios ganadores son insumo del agente de anuncios. Para VSL, el ganador
     // relevante es el VSL que retuvo (Voomly), que ya viaja etiquetado en los ejemplos.
     subagentKey === "anuncios"
-      ? (winners ? `\n— ANUNCIOS GANADORES DE ESTE CLIENTE (piso, no techo: proponé ÁNGULOS NUEVOS) —\n${winners}` : "\n— (Aún no hay anuncios ganadores cargados para este cliente) —")
+      ? (winners ? `\n— ANUNCIOS GANADORES DE ESTE CLIENTE (Meta; piso, no techo: proponé ÁNGULOS NUEVOS) —\n${winners}` : "\n— (Aún no hay anuncios ganadores de este cliente en Meta) —")
+      : "",
+    // Banco curado a mano, por nicho: la referencia de oro cuando el cliente todavía no tiene
+    // historial propio. Se clona la ESTRUCTURA y el ángulo, nunca las frases ni las cifras.
+    subagentKey === "anuncios" && bancoGanadores
+      ? `\n— GANADORES DEL BANCO KOREX (curados a mano, del mismo nicho; oro para clonar estructura y ángulo, JAMÁS copiar el texto ni los números) —\n${bancoGanadores}`
       : "",
     // El estado del pipeline y las métricas son del cliente/funnel: estables. Van ACÁ y no al
     // final —donde estaban— para que el corte del cache caiga entre lo estable y lo recuperado.
