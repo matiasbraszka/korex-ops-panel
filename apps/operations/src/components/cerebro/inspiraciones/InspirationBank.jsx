@@ -149,11 +149,11 @@ export default function InspirationBank() {
           <div className="text-[15px] font-bold text-[#1A1D26] flex items-center gap-2">
             <Images size={17} style={{ color: BLUE }} /> Banco de inspiraciones
           </div>
-          <p className="text-[12.5px] text-[#6B7280] mt-1 max-w-[640px]">
-            Anuncios en imagen que vas guardando como referencia, ordenados por nicho. Se ven en grande,
-            se descargan y quedan guardados en el servidor (borrar acá no borra el archivo).
-            <b> Todavía no está conectado a ningún agente</b>: es la biblioteca que va a usar el
-            agente de creativos cuando lo hagamos.
+          <p className="text-[12.5px] text-[#6B7280] mt-1 max-w-[660px]">
+            Anuncios de referencia, ordenados por nicho. Los que marcás como <b>Ganador</b> (con su copy y
+            sus métricas) los <b>lee el agente de Anuncios</b> como referencia de oro de ese nicho. Las
+            inspiraciones sueltas quedan de biblioteca para el futuro agente de creativos. Todo se ve en
+            grande, se descarga y queda guardado (borrar acá no borra el archivo).
           </p>
         </div>
         {canWrite && (
