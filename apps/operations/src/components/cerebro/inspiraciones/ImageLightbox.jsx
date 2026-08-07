@@ -4,8 +4,19 @@
 // externos) y arrastra Bunny, video y transcripciones. Cambiarle la firma para soportar
 // prev/next tocaría esa página. Acá solo hay imágenes.
 import { useEffect, useRef, useState } from 'react';
-import { X, ChevronLeft, ChevronRight, Download, Loader2, Star } from 'lucide-react';
+import { X, ChevronLeft, ChevronRight, Download, Loader2, Star, Trophy } from 'lucide-react';
 import { descargar } from './inspiraciones';
+
+// Etiquetas y formato de las métricas del ganador, en el orden en que se muestran.
+const METRICAS = [
+  { k: 'cpl', label: 'CPL', fmt: (v) => `US$${v}` },
+  { k: 'hook_rate', label: 'Hook rate', fmt: (v) => `${v}%` },
+  { k: 'retencion_seg', label: 'Retención', fmt: (v) => `${v}s` },
+  { k: 'ctr', label: 'CTR', fmt: (v) => `${v}%` },
+  { k: 'frecuencia', label: 'Frecuencia', fmt: (v) => `${v}` },
+  { k: 'cpm', label: 'CPM', fmt: (v) => `US$${v}` },
+];
+const fechaCorta = (s) => { try { return new Date(s + 'T00:00:00').toLocaleDateString('es-AR', { day: 'numeric', month: 'short', year: 'numeric' }); } catch { return s; } };
 
 export default function ImageLightbox({ items, index, urls, onIndex, onClose }) {
   const [bajando, setBajando] = useState(false);
@@ -28,16 +39,22 @@ export default function ImageLightbox({ items, index, urls, onIndex, onClose }) 
   const it = items[index];
 
   // Precargar la anterior y la siguiente para que pasar de una a otra no parpadee.
+  // Solo imágenes: precargar un video con new Image() no sirve y tira error de decodificación.
   useEffect(() => {
     [index - 1, index + 1].forEach((i) => {
-      const u = items[i] && urls[items[i].storage_path];
-      if (u) { const img = new Image(); img.src = u; }
+      const vecino = items[i];
+      const u = vecino && urls[vecino.storage_path];
+      if (u && !(vecino.mime_type || '').startsWith('video/')) { const img = new Image(); img.src = u; }
     });
   }, [index, items, urls]);
 
   if (!it) return null;
   const url = urls[it.storage_path];
   const nicho = it.marketing_niches;
+  const esVideo = (it.mime_type || '').startsWith('video/');
+  const ganador = !!it.es_ganador;
+  const met = it.metrics || {};
+  const metricas = METRICAS.filter((m) => met[m.k] != null && met[m.k] !== '');
 
   const bajar = async () => {
     if (bajando) return;
@@ -56,7 +73,9 @@ export default function ImageLightbox({ items, index, urls, onIndex, onClose }) 
 
       <div className="relative flex flex-col max-w-[92vw] max-h-[92vh]">
         <div className="flex items-center gap-2 mb-2">
-          {it.starred && <Star size={14} className="text-[#F5B301] shrink-0" fill="#F5B301" />}
+          {ganador
+            ? <Trophy size={14} className="shrink-0" style={{ color: '#E7C05A' }} fill="#E7C05A" />
+            : it.starred && <Star size={14} className="text-[#F5B301] shrink-0" fill="#F5B301" />}
           <span className="text-[13px] font-semibold text-white/90 truncate min-w-0">{it.title}</span>
           {nicho?.label && (
             <span className="text-[10.5px] font-semibold py-0.5 px-2 rounded-full shrink-0"
@@ -74,9 +93,11 @@ export default function ImageLightbox({ items, index, urls, onIndex, onClose }) 
         </div>
 
         <div className="relative rounded-xl overflow-hidden bg-black flex items-center justify-center" style={{ minWidth: 280, minHeight: 200 }}>
-          {url
-            ? <img src={url} alt={it.title} className="max-w-[92vw] max-h-[78vh] block object-contain" />
-            : <div className="p-16 text-white/50 text-[13px]"><Loader2 size={18} className="animate-spin inline mr-2" />Cargando…</div>}
+          {!url
+            ? <div className="p-16 text-white/50 text-[13px]"><Loader2 size={18} className="animate-spin inline mr-2" />Cargando…</div>
+            : esVideo
+              ? <video src={url} controls autoPlay className="max-w-[92vw] max-h-[78vh] block" />
+              : <img src={url} alt={it.title} className="max-w-[92vw] max-h-[78vh] block object-contain" />}
 
           {index > 0 && (
             <button onClick={ir(-1)} title="Anterior (←)"
@@ -90,10 +111,31 @@ export default function ImageLightbox({ items, index, urls, onIndex, onClose }) 
           )}
         </div>
 
-        {(it.notes || it.brand || it.source_url) && (
-          <div className="mt-2 rounded-xl bg-white/[.07] border border-white/10 p-3 max-h-[16vh] overflow-y-auto">
+        {(it.notes || it.brand || it.source_url || ganador) && (
+          <div className="mt-2 rounded-xl bg-white/[.07] border border-white/10 p-3 max-h-[22vh] overflow-y-auto grid gap-2">
+            {ganador && metricas.length > 0 && (
+              <div className="flex items-center gap-1.5 flex-wrap">
+                {metricas.map((m) => (
+                  <span key={m.k} className="text-[11px] font-bold py-0.5 px-2 rounded-full"
+                    style={{ background: 'rgba(231,192,90,.16)', color: '#E7C05A', border: '1px solid rgba(231,192,90,.35)' }}>
+                    {m.label} {m.fmt(met[m.k])}
+                  </span>
+                ))}
+                {(it.activo_desde || it.activo_hasta) && (
+                  <span className="text-[11px] text-white/55">
+                    Activo {it.activo_desde ? fechaCorta(it.activo_desde) : '—'}{it.activo_hasta ? ` → ${fechaCorta(it.activo_hasta)}` : ''}
+                  </span>
+                )}
+              </div>
+            )}
             {it.notes && <div className="text-[12.5px] leading-relaxed text-white/85 whitespace-pre-wrap">{it.notes}</div>}
-            <div className="flex items-center gap-2 flex-wrap mt-1">
+            {ganador && it.ad_copy && (
+              <div className="rounded-lg bg-white/[.05] border border-white/10 p-2.5">
+                <div className="text-[10px] font-bold uppercase tracking-wider text-white/40 mb-1">El copy del anuncio</div>
+                <div className="text-[12px] leading-relaxed text-white/80 whitespace-pre-wrap">{it.ad_copy}</div>
+              </div>
+            )}
+            <div className="flex items-center gap-2 flex-wrap">
               {it.brand && <span className="text-[11px] text-white/55">Marca: {it.brand}</span>}
               {it.source_url && (
                 <a href={it.source_url} target="_blank" rel="noreferrer" className="text-[11px] text-[#8FB4FF] hover:underline">Ver el original</a>

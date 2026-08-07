@@ -12,11 +12,20 @@ export const TABLA_NICHOS = 'marketing_niches';
 
 // Los mismos que acepta el bucket. Si acá se agrega uno, hay que agregarlo también en
 // allowed_mime_types de la migración o el archivo se sube y Storage lo rechaza.
-export const MIMES = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'image/gif'];
-export const MAX_BYTES = 15 * 1024 * 1024; // 15 MB, igual que file_size_limit del bucket
+export const MIMES_IMG = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'image/gif'];
+export const MIMES_VIDEO = ['video/mp4', 'video/quicktime', 'video/webm'];
+export const MIMES = [...MIMES_IMG, ...MIMES_VIDEO];
+// El video pesa mucho más que una imagen: el bucket admite hasta 200 MB (ver la migración
+// marketing_inspiraciones_ganadores_v1.sql). Las imágenes se quedan en 15 MB.
+export const MAX_IMG = 15 * 1024 * 1024;
+export const MAX_VIDEO = 200 * 1024 * 1024;
+export const MAX_BYTES = MAX_VIDEO; // tope duro del input; el límite fino lo pone maxDe()
 export const POR_PAGINA = 24;
 
-export const esImagen = (f) => !!f && MIMES.includes((f.type || '').toLowerCase());
+export const esImagen = (f) => !!f && MIMES_IMG.includes((f.type || '').toLowerCase());
+export const esVideo = (f) => !!f && MIMES_VIDEO.includes((f.type || '').toLowerCase());
+export const esCreativo = (f) => esImagen(f) || esVideo(f);
+export const maxDe = (f) => (esVideo(f) ? MAX_VIDEO : MAX_IMG);
 
 export const pesoLegible = (b) => {
   if (!b) return '';
@@ -107,6 +116,12 @@ export async function subirInspiracion({ file, userId, comun, checksum, dims }) 
     client_id: comun.client_id || null,
     brand: comun.brand || null,
     created_by: userId || null,
+    // Campos del anuncio GANADOR (vacíos cuando es una inspiración suelta).
+    es_ganador: !!comun.es_ganador,
+    ad_copy: comun.ad_copy || null,
+    activo_desde: comun.activo_desde || null,
+    activo_hasta: comun.activo_hasta || null,
+    metrics: comun.metrics || {},
   };
   const { data, error } = await supabase.from(TABLA).insert(fila).select('*').single();
   if (error) throw error;

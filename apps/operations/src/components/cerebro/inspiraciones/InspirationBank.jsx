@@ -12,12 +12,13 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { supabase } from '@korex/db';
 import { useCan } from '@korex/auth';
 import { useApp } from '../../../context/AppContext';
-import { Images, Loader2, Search, Star, Trash2, Plus, X } from 'lucide-react';
+import { Images, Loader2, Search, Star, Trash2, Plus, X, Trophy } from 'lucide-react';
 import { BUCKET, TABLA, TABLA_NICHOS, POR_PAGINA } from './inspiraciones';
 import { useSignedUrls } from './useSignedUrls';
 import NicheChips from './NicheChips';
 import InspirationCard from './InspirationCard';
 import InspirationUploader from './InspirationUploader';
+import WinnerUploader from './WinnerUploader';
 import ImageLightbox from './ImageLightbox';
 
 const BLUE = '#5B7CF5';
@@ -34,6 +35,7 @@ export default function InspirationBank() {
   const [nicho, setNicho] = useState(null);
   const [q, setQ] = useState('');
   const [soloDestacadas, setSoloDestacadas] = useState(false);
+  const [soloGanadores, setSoloGanadores] = useState(false);
   const [verBorradas, setVerBorradas] = useState(false);
 
   const [rows, setRows] = useState([]);
@@ -41,6 +43,7 @@ export default function InspirationBank() {
   const pagina = useRef(0);
   const [cargando, setCargando] = useState(true);
   const [subiendoAbierto, setSubiendoAbierto] = useState(false);
+  const [ganadorAbierto, setGanadorAbierto] = useState(false);
   const [lightbox, setLightbox] = useState(null);   // índice dentro de rows
 
   // ── Catálogo de nichos + conteos ───────────────────────────────────────────
@@ -68,7 +71,8 @@ export default function InspirationBank() {
     query = verBorradas ? query.not('deleted_at', 'is', null) : query.is('deleted_at', null);
     if (nicho) query = query.eq('niche_slug', nicho);
     if (soloDestacadas) query = query.eq('starred', true);
-    if (q.trim()) query = query.or(`title.ilike.%${q.trim()}%,notes.ilike.%${q.trim()}%,brand.ilike.%${q.trim()}%`);
+    if (soloGanadores) query = query.eq('es_ganador', true);
+    if (q.trim()) query = query.or(`title.ilike.%${q.trim()}%,notes.ilike.%${q.trim()}%,brand.ilike.%${q.trim()}%,ad_copy.ilike.%${q.trim()}%`);
 
     const { data, count } = await query
       .order('created_at', { ascending: false })
@@ -78,7 +82,7 @@ export default function InspirationBank() {
     setRows((prev) => (acumular ? [...prev, ...(data || [])] : (data || [])));
     setTotal(count || 0);
     setCargando(false);
-  }, [nicho, q, soloDestacadas, verBorradas]);
+  }, [nicho, q, soloDestacadas, soloGanadores, verBorradas]);
 
   // Al cambiar cualquier filtro se vuelve a la primera página. La página va en un ref
   // porque no se dibuja en ningún lado: solo la necesita "Ver más".
@@ -135,7 +139,7 @@ export default function InspirationBank() {
     cargarPagina(0, false);
   };
 
-  const hayFiltro = !!nicho || !!q.trim() || soloDestacadas;
+  const hayFiltro = !!nicho || !!q.trim() || soloDestacadas || soloGanadores;
   const nichoDeFiltro = niches.find((n) => n.slug === nicho);
 
   return (
@@ -153,15 +157,35 @@ export default function InspirationBank() {
           </p>
         </div>
         {canWrite && (
-          <button onClick={() => setSubiendoAbierto((s) => !s)}
-            className="inline-flex items-center gap-1.5 py-2 px-3.5 rounded-lg text-[12.5px] font-semibold cursor-pointer border"
-            style={subiendoAbierto
-              ? { background: '#fff', borderColor: '#E2E5EB', color: '#6B7280' }
-              : { background: BLUE, borderColor: BLUE, color: '#fff' }}>
-            {subiendoAbierto ? <><X size={14} /> Cerrar</> : <><Plus size={14} /> Cargar imágenes</>}
-          </button>
+          <div className="flex items-center gap-2">
+            <button onClick={() => { setGanadorAbierto((s) => !s); setSubiendoAbierto(false); }}
+              className="inline-flex items-center gap-1.5 py-2 px-3.5 rounded-lg text-[12.5px] font-semibold cursor-pointer border"
+              style={ganadorAbierto
+                ? { background: '#fff', borderColor: '#EAD9A8', color: '#8A6D2A' }
+                : { background: '#C79A2E', borderColor: '#C79A2E', color: '#fff' }}>
+              {ganadorAbierto ? <><X size={14} /> Cerrar</> : <><Trophy size={14} /> Cargar ganador</>}
+            </button>
+            <button onClick={() => { setSubiendoAbierto((s) => !s); setGanadorAbierto(false); }}
+              className="inline-flex items-center gap-1.5 py-2 px-3.5 rounded-lg text-[12.5px] font-semibold cursor-pointer border"
+              style={subiendoAbierto
+                ? { background: '#fff', borderColor: '#E2E5EB', color: '#6B7280' }
+                : { background: '#fff', borderColor: '#E2E5EB', color: '#4B5563' }}>
+              {subiendoAbierto ? <><X size={14} /> Cerrar</> : <><Plus size={14} /> Cargar inspiraciones</>}
+            </button>
+          </div>
         )}
       </div>
+
+      {ganadorAbierto && canWrite && (
+        <WinnerUploader
+          niches={niches}
+          nichoSugerido={nicho}
+          userId={currentUser?.id}
+          clients={clients}
+          onSubida={(fila) => { setGanadorAbierto(false); onSubidas([fila]); }}
+          onCancelar={() => setGanadorAbierto(false)}
+        />
+      )}
 
       {subiendoAbierto && canWrite && (
         <InspirationUploader
@@ -184,6 +208,13 @@ export default function InspirationBank() {
           <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar por título, nota o marca…"
             className="py-1.5 pl-8 pr-3 text-[12.5px] border border-[#E2E5EB] rounded-lg outline-none focus:border-[#5B7CF5] bg-white w-[260px] max-md:w-full" />
         </div>
+        <button onClick={() => setSoloGanadores((s) => !s)}
+          className="inline-flex items-center gap-1.5 py-1.5 px-3 rounded-lg text-[12.5px] font-semibold cursor-pointer border"
+          style={soloGanadores
+            ? { background: '#FCFAF3', borderColor: '#C79A2E', color: '#7A5B12' }
+            : { background: '#fff', borderColor: '#E2E5EB', color: '#6B7280' }}>
+          <Trophy size={13} fill={soloGanadores ? '#C79A2E' : 'none'} /> Ganadores
+        </button>
         <button onClick={() => setSoloDestacadas((s) => !s)}
           className="inline-flex items-center gap-1.5 py-1.5 px-3 rounded-lg text-[12.5px] font-semibold cursor-pointer border"
           style={soloDestacadas
