@@ -151,6 +151,30 @@ export default function OnboardingBuilderPage() {
   };
 
   /**
+   * Cortar (o unir) pantallas dentro de un paso.
+   *
+   * Una pantalla es simplemente "las preguntas que comparten el número de pantalla".
+   * Se podía cambiar ese número a mano, pregunta por pregunta, pero mover el corte
+   * obligaba a renumerar TODAS las de abajo una por una.
+   *
+   * Acá se corre la pregunta elegida y todas las que le siguen: +1 abre una pantalla
+   * nueva justo antes de ella, -1 la vuelve a juntar con la de arriba. Como el corrimiento
+   * es parejo, los cortes que ya existían más abajo se mantienen tal cual.
+   */
+  const moverCortePantalla = (q, dir) => {
+    const orden = preguntas.filter((x) => x.skey === q.skey)
+      .sort((a, b) => (a.pantalla - b.pantalla) || (a.orden - b.orden));
+    const i = orden.findIndex((x) => x.qkey === q.qkey);
+    if (i < 0) return;
+    if (dir < 0 && (q.pantalla ?? 0) <= 0) return;
+    const desde = new Set(orden.slice(i).map((x) => x.qkey));
+    setPreguntas((qs) => qs.map((x) => (desde.has(x.qkey)
+      ? { ...x, pantalla: Math.max(0, (x.pantalla ?? 0) + dir) }
+      : x)));
+    tocar();
+  };
+
+  /**
    * Desactivar, nunca borrar. `onboarding_answers.qkey` no tiene FK a
    * propósito: desactivar es lo que conserva lo que el cliente ya contestó sin
    * que siga contando para el progreso.
@@ -371,28 +395,56 @@ export default function OnboardingBuilderPage() {
                         return (
                           <div key={q.qkey}>
                             {nuevaPantalla && (
-                              <div className="text-[10px] uppercase tracking-wider text-gray-300 mt-1.5 mb-0.5">
-                                Pantalla {q.pantalla + 1}
+                              <div className="flex items-center gap-1 mt-1.5 mb-0.5 group/pant">
+                                <span className="text-[10px] uppercase tracking-wider text-gray-300">
+                                  Pantalla {q.pantalla + 1}
+                                </span>
+                                {i > 0 && (
+                                  <button type="button" title="Juntar con la pantalla de arriba"
+                                    onClick={() => moverCortePantalla(q, -1)}
+                                    className="text-[10px] text-gray-300 opacity-0 group-hover/pant:opacity-100 hover:text-blue-600 bg-transparent border-none cursor-pointer px-0.5">
+                                    ⤒ juntar
+                                  </button>
+                                )}
                               </div>
                             )}
-                            <button
-                              type="button"
-                              onClick={() => setParams({ paso: p.skey, q: q.qkey })}
-                              className={`block w-full text-left py-1 px-1.5 text-[12px] rounded cursor-pointer bg-transparent border-none truncate ${
-                                q.qkey === qkeySel ? 'bg-blue-100 font-semibold' : 'text-gray-600'}`}
-                            >
-                              {q.requerida && <span className="text-red-400 mr-1">*</span>}
-                              {q.label || <em className="text-gray-400">{q.qtype}</em>}
-                            </button>
+                            {/* La acción vive en la pregunta porque el corte es "de acá para abajo". */}
+                            <div className="group/q flex items-center gap-1">
+                              <button
+                                type="button"
+                                onClick={() => setParams({ paso: p.skey, q: q.qkey })}
+                                className={`flex-1 min-w-0 text-left py-1 px-1.5 text-[12px] rounded cursor-pointer bg-transparent border-none truncate ${
+                                  q.qkey === qkeySel ? 'bg-blue-100 font-semibold' : 'text-gray-600'}`}
+                              >
+                                {q.requerida && <span className="text-red-400 mr-1">*</span>}
+                                {q.label || <em className="text-gray-400">{q.qtype}</em>}
+                              </button>
+                              {!nuevaPantalla && (
+                                <button type="button" title="Que la pantalla nueva empiece en esta pregunta (esta y las de abajo bajan una pantalla)"
+                                  onClick={() => moverCortePantalla(q, 1)}
+                                  className="px-1 text-[11px] text-gray-300 opacity-0 group-hover/q:opacity-100 hover:text-blue-600 bg-transparent border-none cursor-pointer shrink-0">
+                                  ⤶
+                                </button>
+                              )}
+                            </div>
                           </div>
                         );
                       })}
-                      <button
-                        type="button"
-                        onClick={() => agregarPregunta(p.skey,
-                          delPaso.length ? delPaso[delPaso.length - 1].pantalla : 0)}
-                        className="mt-1.5 text-[11px] text-blue-600 hover:text-blue-800 bg-transparent border-none cursor-pointer px-1.5"
-                      >+ pregunta</button>
+                      <div className="flex items-center gap-2.5 mt-1.5">
+                        <button
+                          type="button"
+                          onClick={() => agregarPregunta(p.skey,
+                            delPaso.length ? delPaso[delPaso.length - 1].pantalla : 0)}
+                          className="text-[11px] text-blue-600 hover:text-blue-800 bg-transparent border-none cursor-pointer px-1.5"
+                        >+ pregunta</button>
+                        <button
+                          type="button"
+                          title="Agrega una pregunta arrancando una pantalla nueva al final"
+                          onClick={() => agregarPregunta(p.skey,
+                            (delPaso.length ? delPaso[delPaso.length - 1].pantalla : -1) + 1)}
+                          className="text-[11px] text-blue-600 hover:text-blue-800 bg-transparent border-none cursor-pointer px-1.5"
+                        >+ pantalla</button>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -587,7 +639,7 @@ function EditorPregunta({ q, paso, preguntas, onEditar, onDuplicar, onQuitar }) 
             {TIPOS.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
           </select>
         </Campo>
-        <Campo titulo="Pantalla" hint="Mismo número = misma pantalla.">
+        <Campo titulo="Pantalla" hint="Mismo número = misma pantalla. Para cortar acá, usá el ⤶ del árbol.">
           <input type="number" className={input} value={q.pantalla ?? 0}
                  onChange={(e) => onEditar(q.qkey, { pantalla: Number(e.target.value) })} />
         </Campo>
