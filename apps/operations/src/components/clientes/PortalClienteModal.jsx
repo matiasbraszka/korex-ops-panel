@@ -102,6 +102,22 @@ export default function PortalClienteModal({ client, onClose }) {
       : [...actuales, funnelId]);
   };
 
+  // Modo grabador: en el portal ve ÚNICAMENTE los guiones que tiene asignados.
+  // Si no tiene ninguno asignado la pantalla le queda vacía, así que se avisa antes.
+  const toggleSoloGuiones = async (c) => {
+    const nuevo = !c.solo_sus_guiones;
+    if (nuevo && !c.guiones_asignados) {
+      if (!window.confirm(
+        `${c.full_name || c.email} no tiene ningún guion asignado todavía.\n\n`
+        + 'Si activás esto ahora, va a entrar al portal y no va a ver nada. '
+        + 'Los guiones se le asignan desde el DEL, en el selector de quién graba cada uno.\n\n'
+        + '¿Activarlo igual?')) return;
+    }
+    setCollabs((prev) => prev.map((x) => x.id === c.id ? { ...x, solo_sus_guiones: nuevo } : x));
+    const { data } = await supabase.rpc('portal_collab_set_solo_guiones', { p_id: c.id, p_valor: nuevo });
+    if (!data?.ok) { window.alert('No se pudo cambiar el modo grabador.'); cargarCollab(); }
+  };
+
   // Dar por hecho el onboarding de un cliente anterior al sistema (o deshacerlo).
   const darPorHecho = async (hecho) => {
     let nota = null;
@@ -404,8 +420,24 @@ export default function PortalClienteModal({ client, onClose }) {
                     </button>
                   </div>
 
+                  {/* Modo grabador: solo los guiones que tiene que grabar, nada más. */}
+                  {/^encargado de grabar/i.test(c.role || '') && (
+                    <label className="mt-1 flex items-start gap-1.5 cursor-pointer">
+                      <input type="checkbox" className="cursor-pointer mt-[2px]"
+                        checked={!!c.solo_sus_guiones} onChange={() => toggleSoloGuiones(c)} />
+                      <span className="text-[10.5px] leading-snug" style={{ color: c.solo_sus_guiones ? '#B45309' : '#AEB4BF' }}>
+                        Ve <b>solo los guiones que tiene que grabar</b>
+                        {typeof c.guiones_asignados === 'number' && (
+                          <span className={c.guiones_asignados ? '' : 'text-[#DC2626]'}>
+                            {' · '}{c.guiones_asignados} asignado{c.guiones_asignados === 1 ? '' : 's'}
+                          </span>
+                        )}
+                      </span>
+                    </label>
+                  )}
+
                   {/* Qué embudos ve. Sin marcar ninguno = todos (lo de siempre). */}
-                  {funnels.length > 0 && (
+                  {funnels.length > 0 && !c.solo_sus_guiones && (
                     <div className="mt-1">
                       <button onClick={() => setFunnelsOpen(abierto ? null : c.id)}
                         className="inline-flex items-center gap-1 text-[10.5px] bg-transparent border-none cursor-pointer p-0 hover:text-[#2E69E0]"
