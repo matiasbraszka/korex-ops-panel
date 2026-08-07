@@ -20,6 +20,7 @@ import Campo from '../components/Campo';
 import { CampoSesion, CampoGrabacion } from '../components/CampoAgenda';
 import Resumen from '../components/Resumen';
 import { lleno, minLargo, visible, calcularProgreso } from '../progreso';
+import { urlEmbed } from '../videoEmbed';
 
 function Pastilla({ children }) {
   return (
@@ -153,7 +154,7 @@ export default function PasoScreen() {
                 simplemente no se renderiza. */}
             {p.video && (
               <div style={{ marginBottom: 28, borderRadius: 16, overflow: 'hidden', aspectRatio: '16/9' }}>
-                <iframe src={p.video} title={p.titulo} allowFullScreen
+                <iframe src={urlEmbed(p.video)} title={p.titulo} allowFullScreen
                         style={{ width: '100%', height: '100%', border: 0, display: 'block' }} />
               </div>
             )}

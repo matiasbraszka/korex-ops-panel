@@ -15,6 +15,7 @@ import { limpiarHtml } from '../../components/richHtml';
 import { useOnboarding } from '../OnboardingProvider';
 import OnbShell from '../components/OnbShell';
 import Roadmap from '../components/Roadmap';
+import { urlEmbed } from '../videoEmbed';
 
 const CHIPS = ['≈ 45 minutos', 'Se guarda solo', 'Puedes volver cuando quieras'];
 
@@ -110,7 +111,7 @@ export default function BienvenidaScreen() {
           {video && (
             <div style={{ position: 'relative', width: '100%', aspectRatio: '16/9', minHeight: 190, borderRadius: 20, overflow: 'hidden', background: T.dark, marginBottom: 6, boxShadow: '0 12px 32px rgba(10,22,40,.14)' }}>
               {vio ? (
-                <iframe src={video} title="Tu bienvenida" allowFullScreen style={{ width: '100%', height: '100%', border: 0, display: 'block' }} />
+                <iframe src={urlEmbed(video)} title="Tu bienvenida" allowFullScreen style={{ width: '100%', height: '100%', border: 0, display: 'block' }} />
               ) : (
                 <button type="button" onClick={() => setVio(true)} style={{ position: 'absolute', inset: 0, width: '100%', border: 'none', background: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}>
                   <span style={{ position: 'absolute', inset: 0, background: 'radial-gradient(circle at 50% 42%, rgba(72,120,255,.26) 0%, rgba(72,120,255,0) 62%)' }} />

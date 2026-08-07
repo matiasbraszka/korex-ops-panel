@@ -117,10 +117,13 @@ export default function BienvenidaReglasEditor({ onClose }) {
           ) : (
             <>
               <div className="mb-4">
-                <span className="block text-[11px] font-semibold text-gray-500 mb-1">Video de bienvenida (URL para incrustar)</span>
+                <span className="block text-[11px] font-semibold text-gray-500 mb-1">Video de bienvenida</span>
                 <input value={video} onChange={(e) => setVideo(e.target.value)} className={input}
-                  placeholder="https://iframe.mediadelivery.net/embed/707218/..." />
-                <div className="text-[10.5px] text-gray-400 mt-1">La URL embed del video (Bunny, YouTube, etc.). Vacío = no se muestra reproductor.</div>
+                  placeholder="https://www.loom.com/share/…  ·  https://youtu.be/…  ·  Bunny" />
+                <div className="text-[10.5px] text-gray-400 mt-1">
+                  Pegá el link tal como lo copiás de Loom, YouTube, Vimeo, Drive o Bunny: el portal
+                  lo convierte solo al formato que se puede reproducir. Vacío = no se muestra reproductor.
+                </div>
               </div>
 
               <span className="block text-[11px] font-semibold text-gray-500 mb-1">Reglas del servicio (documento)</span>

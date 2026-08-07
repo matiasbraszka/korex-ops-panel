@@ -18,6 +18,7 @@ import { T, FUENTE, kicker, input, textarea } from '../tokens';
 import { medidor } from '../progreso';
 import GrabadorVoz from './GrabadorVoz';
 import CampoArchivos from './CampoArchivos';
+import { urlEmbed } from '../videoEmbed';
 
 // ── Piezas compartidas ───────────────────────────────────────────────────────
 
@@ -145,7 +146,7 @@ function Info({ q }) {
       <div style={{ fontSize: 13, lineHeight: 1.6, color: T.faint }}>{q.infoCuerpo}</div>
       {q.video && (
         <div style={{ marginTop: 14, borderRadius: 12, overflow: 'hidden', aspectRatio: '16/9' }}>
-          <iframe src={q.video} title={q.infoTitulo} allowFullScreen
+          <iframe src={urlEmbed(q.video)} title={q.infoTitulo} allowFullScreen
                   style={{ width: '100%', height: '100%', border: 0, display: 'block' }} />
         </div>
       )}

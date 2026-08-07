@@ -7,6 +7,7 @@ import { useState } from 'react';
 import { limpiarHtml } from '../../components/richHtml';
 import { IcoDoc, IcoX, IcoPlay } from '../../components/icons';
 import { T, FUENTE } from '../tokens';
+import { urlEmbed } from '../videoEmbed';
 
 export default function ReglasSheet({ html, video, onCerrar }) {
   const cuerpo = String(html || '').trim();
@@ -64,7 +65,7 @@ export default function ReglasSheet({ html, video, onCerrar }) {
               borderRadius: 14, overflow: 'hidden', background: T.dark, marginBottom: 20,
             }}>
               {vio
-                ? <iframe src={vid} title="Video de bienvenida" allowFullScreen
+                ? <iframe src={urlEmbed(vid)} title="Video de bienvenida" allowFullScreen
                     style={{ width: '100%', height: '100%', border: 0, display: 'block' }} />
                 : (
                   <button type="button" onClick={() => setVio(true)} style={{
