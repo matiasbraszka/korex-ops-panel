@@ -277,15 +277,32 @@ function Opcion({ q, valor, valorJson, onChange }) {
 /** Varias opciones en pastillas. `maxOpciones` limita cuántas se pueden marcar. */
 function Chispas({ q, valor, valorJson, onChange }) {
   const sel = Array.isArray(valorJson?.valores) ? valorJson.valores : [];
+  // Una opción con value 'otros' abre un campo libre: las listas cerradas obligan a
+  // encajar en una casilla que a veces no es la de esa persona, y eso se le nota al copy.
+  const otro = String(valorJson?.otro || '');
+  const eligioOtros = sel.includes('otros');
+
+  // El texto de la respuesta es lo que después leen el equipo y los agentes: se arma
+  // con las etiquetas elegidas y, si marcó "Otros", con lo que escribió en su lugar.
+  const armar = (valores, textoOtro) => (q.opciones || [])
+    .filter((o) => valores.includes(o.value))
+    .map((o) => (o.value === 'otros' ? String(textoOtro || '').trim() : o.label))
+    .filter(Boolean)
+    .join(', ');
+
   const alternar = (v) => {
     let next = sel.includes(v) ? sel.filter((x) => x !== v) : [...sel, v];
     // Con tope 1 se comporta como un selector: elegir otra reemplaza.
     if (q.maxOpciones && next.length > q.maxOpciones) next = [v];
-    const etiquetas = (q.opciones || [])
-      .filter((o) => next.includes(o.value)).map((o) => o.label);
-    onChange(etiquetas.join(', '), { valorJson: { valores: next }, inmediato: true });
+    const textoOtro = next.includes('otros') ? otro : '';
+    onChange(armar(next, textoOtro), { valorJson: { valores: next, otro: textoOtro }, inmediato: true });
   };
+  const escribirOtro = (txt) => {
+    onChange(armar(sel, txt), { valorJson: { valores: sel, otro: txt } });
+  };
+
   return (
+    <div>
     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 9 }}>
       {(q.opciones || []).map((o) => {
         const activa = sel.includes(o.value);
@@ -307,6 +324,19 @@ function Chispas({ q, valor, valorJson, onChange }) {
           </button>
         );
       })}
+    </div>
+    {eligioOtros && (
+      <input
+        value={otro}
+        onChange={(e) => escribirOtro(e.target.value)}
+        placeholder="¿Cuál? Escribilo con tus palabras"
+        style={{
+          marginTop: 10, width: '100%', boxSizing: 'border-box',
+          padding: '13px 15px', fontSize: 14.5, borderRadius: 13,
+          border: `1.5px solid ${T.line}`, outline: 'none', color: T.ink, background: '#fff',
+        }}
+      />
+    )}
     </div>
   );
 }
