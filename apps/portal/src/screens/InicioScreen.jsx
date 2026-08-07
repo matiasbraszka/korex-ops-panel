@@ -8,6 +8,7 @@ import { ChipEmbudo } from './MaterialScreen';
 import { T, display, microLabel } from '../components/theme';
 import { IcoVideo, IcoImage, IcoKey, IcoClock, IcoInfo, IcoCheck, IcoChevR, IcoFile, IcoDoc } from '../components/icons';
 import logo from '../assets/logo-korex.svg';
+import { urlEmbed } from '../onboarding/videoEmbed';
 
 // INICIO — exacta al prototipo: logo + iniciales, "Hola, Sergio", Avance,
 // LO QUE TE FALTA como tarjetas grandes accionables y lo entregado en verde.
@@ -20,6 +21,7 @@ export default function InicioScreen() {
   const [acc, setAcc] = useState(false);
   const [tut, setTut] = useState(false);
   const [reg, setReg] = useState(false);
+  const [verVideo, setVerVideo] = useState(false);   // "Cómo se usa la plataforma"
 
   if (loading) return <Loading label="Cargando tu proyecto…" />;
   const d = data || {};
@@ -32,6 +34,7 @@ export default function InicioScreen() {
   const completados = Array.isArray(d.completados) ? d.completados : [];
   const total = pendientes.length + tareas.length;
   const wa = (d.whatsapp || '').replace(/\D/g, '');
+  const videoPlataforma = d.videoPlataforma || '';
 
   // Onboarding sin terminar: es lo único que importa hasta que lo cierre.
   const onb = d.onboarding || {};
@@ -65,6 +68,53 @@ export default function InicioScreen() {
         <div style={display(30, '-0.035em')}>Hola{nombre ? `, ${nombre}` : ''}</div>
         <div style={{ fontSize: 15, lineHeight: 1.5, color: T.text2, textWrap: 'pretty' }}>{intro}</div>
       </div>
+
+      {/* Cómo se usa la plataforma. Cerrado ocupa una línea; abierto muestra el video.
+          Va acá arriba, antes de todo lo accionable: el que no entiende la pantalla lo
+          ve enseguida, y al que ya la conoce no le come espacio. */}
+      {videoPlataforma && (
+        <div style={{ padding: '16px 22px 0' }}>
+          <div style={{ background: '#fff', borderRadius: 16, boxShadow: 'var(--shadow-sm)', overflow: 'hidden' }}>
+            <button
+              type="button" onClick={() => setVerVideo((v) => !v)}
+              aria-expanded={verVideo}
+              style={{
+                width: '100%', display: 'flex', alignItems: 'center', gap: 11,
+                padding: '13px 15px', background: 'transparent', border: 0,
+                cursor: 'pointer', textAlign: 'left', font: 'inherit',
+              }}
+            >
+              <span style={{
+                width: 32, height: 32, flex: 'none', borderRadius: 10,
+                background: 'var(--mk-blue-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}>
+                <IcoVideo size={16} stroke="#1D4ED8" />
+              </span>
+              <span style={{ flex: 1, minWidth: 0 }}>
+                <span style={{ display: 'block', fontSize: 14, fontWeight: 700, color: T.text }}>
+                  Cómo se usa la plataforma
+                </span>
+                <span style={{ display: 'block', fontSize: 12, color: T.text3, marginTop: 1 }}>
+                  Un video corto para sacarle todo el provecho
+                </span>
+              </span>
+              <span style={{ flex: 'none', transform: verVideo ? 'rotate(90deg)' : 'none', transition: 'transform .18s' }}>
+                <IcoChevR size={16} stroke={T.text3} sw={2.4} />
+              </span>
+            </button>
+            {verVideo && (
+              <div style={{ padding: '0 15px 15px' }}>
+                <div style={{ position: 'relative', paddingTop: '56.25%', borderRadius: 12, overflow: 'hidden', background: '#000' }}>
+                  <iframe
+                    src={urlEmbed(videoPlataforma)} title="Cómo se usa la plataforma" allowFullScreen
+                    style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', border: 0 }}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Servicio: días que le quedan + días que el trabajo está frenado por su parte.
           Si el proyecto está en pausa no se muestra ninguno de los dos: los relojes
