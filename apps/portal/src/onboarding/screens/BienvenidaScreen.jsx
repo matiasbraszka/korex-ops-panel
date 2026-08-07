@@ -141,7 +141,7 @@ export default function BienvenidaScreen() {
     return (
       <OnbShell mostrarProgreso={false}>
         <div style={{ animation: 'mkrise .4s ease both' }}>
-          <Roadmap grabacion={grabacion} />
+          <Roadmap grabacion={grabacion} config={catalogo?.roadmap} />
           <PieGate
             onAtras={() => setPaso('video')}
             etiqueta="Continuar"

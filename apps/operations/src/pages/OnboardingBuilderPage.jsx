@@ -175,6 +175,21 @@ export default function OnboardingBuilderPage() {
   };
 
   /**
+   * Mover UNA pregunta a otra pantalla del mismo paso. Queda al final de la
+   * pantalla destino: es lo que uno espera al arrastrar algo a otra pantalla, y
+   * evita que se meta en el medio por el número de orden que traía.
+   * Los huecos de numeración que puedan quedar los emparejo al guardar.
+   */
+  const moverAPantalla = (q, destino) => {
+    const enDestino = preguntas.filter(
+      (x) => x.skey === q.skey && x.pantalla === destino && x.qkey !== q.qkey,
+    );
+    const orden = enDestino.length ? Math.max(...enDestino.map((x) => x.orden || 0)) + 10 : 10;
+    setPreguntas((qs) => qs.map((x) => (x.qkey === q.qkey ? { ...x, pantalla: destino, orden } : x)));
+    tocar();
+  };
+
+  /**
    * Desactivar, nunca borrar. `onboarding_answers.qkey` no tiene FK a
    * propósito: desactivar es lo que conserva lo que el cliente ya contestó sin
    * que siga contando para el progreso.
@@ -250,11 +265,13 @@ export default function OnboardingBuilderPage() {
     pasosOrd.forEach((p) => {
       const suyas = preguntas.filter((q) => q.skey === p.skey)
         .sort((a, b) => (a.pantalla - b.pantalla) || (a.orden - b.orden));
-      let pant = -1; let ord = 0;
+      // Las pantallas también se renumeran de corrido: mover preguntas de una a
+      // otra puede vaciar una del medio, y ahí quedaría un hueco (Pantalla 1, 3).
+      let pant = -1; let ord = 0; let pantNueva = -1;
       suyas.forEach((q) => {
-        if (q.pantalla !== pant) { pant = q.pantalla; ord = 0; }
+        if (q.pantalla !== pant) { pant = q.pantalla; pantNueva += 1; ord = 0; }
         ord += 10;
-        preguntasOrd.push({ ...q, orden: ord });
+        preguntasOrd.push({ ...q, pantalla: pantNueva, orden: ord });
       });
     });
 
@@ -392,12 +409,16 @@ export default function OnboardingBuilderPage() {
                     <div className="ml-3 border-l border-gray-200 pl-2 mb-2">
                       {delPaso.map((q, i) => {
                         const nuevaPantalla = i === 0 || delPaso[i - 1].pantalla !== q.pantalla;
+                        // Se numeran de corrido aunque el número guardado tenga huecos
+                        // (mover preguntas puede vaciar una pantalla del medio).
+                        const nPantalla = [...new Set(delPaso.map((x) => x.pantalla ?? 0))]
+                          .sort((a, b) => a - b).indexOf(q.pantalla ?? 0) + 1;
                         return (
                           <div key={q.qkey}>
                             {nuevaPantalla && (
                               <div className="flex items-center gap-1 mt-1.5 mb-0.5 group/pant">
                                 <span className="text-[10px] uppercase tracking-wider text-gray-300">
-                                  Pantalla {q.pantalla + 1}
+                                  Pantalla {nPantalla}
                                 </span>
                                 {i > 0 && (
                                   <button type="button" title="Juntar con la pantalla de arriba"
@@ -490,6 +511,7 @@ export default function OnboardingBuilderPage() {
           <EditorPregunta
             q={pregunta} paso={paso} preguntas={preguntas}
             onEditar={editarPregunta} onDuplicar={duplicar} onQuitar={quitar}
+            onMoverPantalla={moverAPantalla}
           />
         )}
 
@@ -592,7 +614,7 @@ function EditorPaso({ paso, bloques, onEditar }) {
 
 // ── Editor de pregunta ───────────────────────────────────────────────────────
 
-function EditorPregunta({ q, paso, preguntas, onEditar, onDuplicar, onQuitar }) {
+function EditorPregunta({ q, paso, preguntas, onEditar, onDuplicar, onQuitar, onMoverPantalla }) {
   const set = (k) => (e) => onEditar(q.qkey, { [k]: e.target.value });
   const setNum = (k) => (e) => onEditar(q.qkey, { [k]: e.target.value === '' ? null : Number(e.target.value) });
 
@@ -639,9 +661,37 @@ function EditorPregunta({ q, paso, preguntas, onEditar, onDuplicar, onQuitar }) 
             {TIPOS.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
           </select>
         </Campo>
-        <Campo titulo="Pantalla" hint="Mismo número = misma pantalla. Para cortar acá, usá el ⤶ del árbol.">
-          <input type="number" className={input} value={q.pantalla ?? 0}
-                 onChange={(e) => onEditar(q.qkey, { pantalla: Number(e.target.value) })} />
+        {/* Mover ESTA pregunta a otra pantalla. El ⤶ del árbol corta de ahí para
+            abajo; esto mueve una sola, que es lo que hace falta para acomodar. */}
+        <Campo titulo="Pantalla" hint="En cuál de las pantallas del paso aparece.">
+          <div className="flex flex-wrap items-center gap-1">
+            {(() => {
+              const delPaso = preguntas.filter((x) => x.skey === q.skey);
+              const pantallas = [...new Set(delPaso.map((x) => x.pantalla ?? 0))].sort((a, b) => a - b);
+              const ultima = pantallas.length ? pantallas[pantallas.length - 1] : 0;
+              return (
+                <>
+                  {pantallas.map((p, i) => (
+                    <button key={p} type="button"
+                      onClick={() => onMoverPantalla?.(q, p)}
+                      title={`Mover esta pregunta a la pantalla ${i + 1}`}
+                      className={`w-7 h-7 rounded border text-[12px] cursor-pointer ${
+                        (q.pantalla ?? 0) === p
+                          ? 'border-blue-500 bg-blue-50 text-blue-700 font-bold'
+                          : 'border-gray-200 bg-white text-gray-500 hover:border-blue-300'}`}>
+                      {i + 1}
+                    </button>
+                  ))}
+                  <button type="button"
+                    onClick={() => onMoverPantalla?.(q, ultima + 1)}
+                    title="Llevarla a una pantalla nueva al final"
+                    className="h-7 px-2 rounded border border-dashed border-gray-300 bg-white text-[11.5px] text-gray-500 hover:border-blue-300 hover:text-blue-600 cursor-pointer">
+                    + nueva
+                  </button>
+                </>
+              );
+            })()}
+          </div>
         </Campo>
         <Campo titulo="Largo pedido" hint="0 = sin medidor ni micrófono. Cuenta al 60%.">
           <input type="number" className={input} value={q.largo_objetivo ?? 0}

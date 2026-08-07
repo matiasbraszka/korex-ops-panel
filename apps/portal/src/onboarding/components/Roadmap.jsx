@@ -41,39 +41,46 @@ function Nota({ icono, titulo, children, fecha }) {
   );
 }
 
-export default function Roadmap({ grabacion, heading }) {
+// Intro por defecto (la de siempre) por si el panel no cargó una propia.
+const INTRO = 'Armar tus dos embudos nos lleva entre 20 y 30 días hábiles de trabajo, '
+  + 'sin contar las demoras de tu lado (subir material, revisar, grabarte). Este es el recorrido:';
+
+export default function Roadmap({ grabacion, heading, config }) {
+  // `config` llega del panel (app_settings.onboarding_config → clave roadmap). Si no
+  // hay nada cargado, se usan los textos de siempre: el portal nunca queda en blanco.
+  const fases = Array.isArray(config?.fases) && config.fases.length ? config.fases : FASES;
+  const intro = String(config?.intro || '').trim() || INTRO;
+  const notaGrab = String(config?.nota_grabacion || '').trim();
+  const notaPlazos = String(config?.nota_plazos || '').trim();
+
   return (
     <div>
       <div style={{ ...kicker(T.faint, 11), marginBottom: 4 }}>El camino de tu proyecto</div>
       <h2 style={{ fontFamily: FUENTE.display, fontSize: 'clamp(21px,4.4vw,28px)', fontWeight: 800, letterSpacing: '-.03em', margin: '0 0 8px 0' }}>
-        {heading || 'Cómo trabajamos, paso a paso'}
+        {heading || config?.titulo || 'Cómo trabajamos, paso a paso'}
       </h2>
-      <p style={{ fontSize: 14, lineHeight: 1.6, color: T.soft, margin: '0 0 22px 0' }}>
-        Armar tus <strong style={{ color: T.ink }}>dos embudos</strong> nos lleva entre{' '}
-        <strong style={{ color: T.ink }}>20 y 30 días hábiles</strong> de trabajo, sin contar las demoras de tu lado
-        (subir material, revisar, grabarte). Este es el recorrido:
-      </p>
+      <p style={{ fontSize: 14, lineHeight: 1.6, color: T.soft, margin: '0 0 22px 0' }}>{intro}</p>
 
       <div style={{ position: 'relative', marginBottom: 22 }}>
-        {FASES.map((f, i) => {
-          const ultimo = i === FASES.length - 1;
+        {fases.map((f, i) => {
+          const ultimo = i === fases.length - 1;
           return (
-            <div key={f.n} style={{ display: 'flex', gap: 15 }}>
+            <div key={f.n ?? i} style={{ display: 'flex', gap: 15 }}>
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0 }}>
                 <div style={{
-                  width: 34, height: 34, borderRadius: '50%', background: f.color,
+                  width: 34, height: 34, borderRadius: '50%', background: f.color || '#5B7CF5',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  color: '#fff', fontWeight: 800, fontSize: 14.5, boxShadow: `0 4px 12px ${f.color}55`, zIndex: 1,
-                }}>{f.n}</div>
+                  color: '#fff', fontWeight: 800, fontSize: 14.5, boxShadow: `0 4px 12px ${(f.color || '#5B7CF5')}55`, zIndex: 1,
+                }}>{f.n ?? i + 1}</div>
                 {!ultimo && <div style={{ width: 2, flex: 1, minHeight: 26, background: T.line, margin: '2px 0' }} />}
               </div>
               <div style={{
                 flex: 1, minWidth: 0, marginBottom: ultimo ? 0 : 14,
                 background: '#fff', border: `1px solid ${T.line}`, borderRadius: 14,
-                padding: '14px 16px', borderLeft: `4px solid ${f.color}`,
+                padding: '14px 16px', borderLeft: `4px solid ${f.color || '#5B7CF5'}`,
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                  <span style={{ ...kicker(f.color, 10.5), letterSpacing: '.06em', fontWeight: 800 }}>{f.cuando}</span>
+                  <span style={{ ...kicker(f.color || '#5B7CF5', 10.5), letterSpacing: '.06em', fontWeight: 800 }}>{f.cuando}</span>
                   {f.tuParte && (
                     <span style={{ fontSize: 9.5, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.06em', color: '#B45309', background: '#FEF3C7', borderRadius: 999, padding: '2px 7px' }}>Incluye tu grabación</span>
                   )}
@@ -88,13 +95,17 @@ export default function Roadmap({ grabacion, heading }) {
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         <Nota icono={<IcoClock size={17} stroke={T.azulTinta} sw={2.1} />} titulo="Cronómetro de grabación" fecha={grabacion}>
-          Tienes <strong style={{ color: T.ink }}>10 días</strong> para grabarte desde que te entregamos todos los materiales
-          creativos (guiones, VSL, estructura de la landing y copy).
+          {notaGrab || (<>
+            Tienes <strong style={{ color: T.ink }}>10 días</strong> para grabarte desde que te entregamos todos los materiales
+            creativos (guiones, VSL, estructura de la landing y copy).
+          </>)}
         </Nota>
         <Nota icono={<IcoCalendar size={17} stroke={T.azulTinta} sw={2.1} />} titulo="Días hábiles y pausas">
-          Los plazos corren sobre <strong style={{ color: T.ink }}>días hábiles</strong> y se{' '}
-          <strong style={{ color: T.ink }}>pausan solos</strong> cuando dependen de algo tuyo: grabación, material,
-          accesos o aprobaciones pendientes.
+          {notaPlazos || (<>
+            Los plazos corren sobre <strong style={{ color: T.ink }}>días hábiles</strong> y se{' '}
+            <strong style={{ color: T.ink }}>pausan solos</strong> cuando dependen de algo tuyo: grabación, material,
+            accesos o aprobaciones pendientes.
+          </>)}
         </Nota>
       </div>
     </div>

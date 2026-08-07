@@ -29,7 +29,7 @@ const HECHO = [
 
 export default function ListoScreen() {
   const navigate = useNavigate();
-  const { estado, agenda, respuestas, recargar, completo, flush } = useOnboarding();
+  const { estado, agenda, respuestas, recargar, completo, flush, catalogo } = useOnboarding();
   const [cerrando, setCerrando] = useState(!completo);
   const [faltan, setFaltan] = useState(null);
   const [error, setError] = useState('');
@@ -178,7 +178,7 @@ export default function ListoScreen() {
         </div>
 
         <div style={{ marginBottom: 30 }}>
-          <Roadmap grabacion={grabacion} heading="Así avanza tu proyecto desde ahora" />
+          <Roadmap grabacion={grabacion} heading="Así avanza tu proyecto desde ahora" config={catalogo?.roadmap} />
         </div>
 
         <div style={{ background: T.dark, borderRadius: 18, padding: 24, marginBottom: 26 }}>
