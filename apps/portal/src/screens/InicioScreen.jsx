@@ -57,10 +57,31 @@ export default function InicioScreen() {
     <>
       {isDemo() && <div style={{ padding: '12px 22px 0' }}><DemoBanner /></div>}
 
-      {/* Logo + perfil (iniciales) */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 22px 0' }}>
+      {/* Logo + «Cómo funciona» + perfil (iniciales).
+          El video vive acá y no como tarjeta: el Inicio ya es una pila larga
+          (saludo, servicio, avance, pendientes, entregados, material) y una caja
+          más lo volvía ruido. Desde el encabezado se ve apenas entra, no ocupa
+          nada, y el video se abre en una hoja como el resto de la plataforma. */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '18px 22px 0' }}>
         <img src={logo} alt="Método Korex" style={{ height: 26, width: 'auto' }} />
-        <div onClick={() => setPerfil(true)} role="button" aria-label="Tu perfil" style={{ cursor: 'pointer', width: 36, height: 36, borderRadius: '50%', background: '#fff', boxShadow: 'var(--shadow-sm)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, color: T.text2 }}>{iniciales}</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+          {videoPlataforma && (
+            <button
+              type="button" onClick={() => setVerVideo(true)}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+                height: 34, padding: '0 13px 0 10px', borderRadius: 999,
+                background: '#fff', border: 0, boxShadow: 'var(--shadow-sm)',
+                cursor: 'pointer', font: 'inherit', fontSize: 12.5, fontWeight: 700,
+                color: T.text2, whiteSpace: 'nowrap',
+              }}
+            >
+              <IcoVideo size={15} stroke="var(--mk-blue-ops)" />
+              Cómo funciona
+            </button>
+          )}
+          <div onClick={() => setPerfil(true)} role="button" aria-label="Tu perfil" style={{ cursor: 'pointer', width: 36, height: 36, borderRadius: '50%', background: '#fff', boxShadow: 'var(--shadow-sm)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, color: T.text2, flex: 'none' }}>{iniciales}</div>
+        </div>
       </div>
 
       {/* Hola */}
@@ -68,53 +89,6 @@ export default function InicioScreen() {
         <div style={display(30, '-0.035em')}>Hola{nombre ? `, ${nombre}` : ''}</div>
         <div style={{ fontSize: 15, lineHeight: 1.5, color: T.text2, textWrap: 'pretty' }}>{intro}</div>
       </div>
-
-      {/* Cómo se usa la plataforma. Cerrado ocupa una línea; abierto muestra el video.
-          Va acá arriba, antes de todo lo accionable: el que no entiende la pantalla lo
-          ve enseguida, y al que ya la conoce no le come espacio. */}
-      {videoPlataforma && (
-        <div style={{ padding: '16px 22px 0' }}>
-          <div style={{ background: '#fff', borderRadius: 16, boxShadow: 'var(--shadow-sm)', overflow: 'hidden' }}>
-            <button
-              type="button" onClick={() => setVerVideo((v) => !v)}
-              aria-expanded={verVideo}
-              style={{
-                width: '100%', display: 'flex', alignItems: 'center', gap: 11,
-                padding: '13px 15px', background: 'transparent', border: 0,
-                cursor: 'pointer', textAlign: 'left', font: 'inherit',
-              }}
-            >
-              <span style={{
-                width: 32, height: 32, flex: 'none', borderRadius: 10,
-                background: 'var(--mk-blue-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center',
-              }}>
-                <IcoVideo size={16} stroke="#1D4ED8" />
-              </span>
-              <span style={{ flex: 1, minWidth: 0 }}>
-                <span style={{ display: 'block', fontSize: 14, fontWeight: 700, color: T.text }}>
-                  Cómo se usa la plataforma
-                </span>
-                <span style={{ display: 'block', fontSize: 12, color: T.text3, marginTop: 1 }}>
-                  Un video corto para sacarle todo el provecho
-                </span>
-              </span>
-              <span style={{ flex: 'none', transform: verVideo ? 'rotate(90deg)' : 'none', transition: 'transform .18s' }}>
-                <IcoChevR size={16} stroke={T.text3} sw={2.4} />
-              </span>
-            </button>
-            {verVideo && (
-              <div style={{ padding: '0 15px 15px' }}>
-                <div style={{ position: 'relative', paddingTop: '56.25%', borderRadius: 12, overflow: 'hidden', background: '#000' }}>
-                  <iframe
-                    src={urlEmbed(videoPlataforma)} title="Cómo se usa la plataforma" allowFullScreen
-                    style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', border: 0 }}
-                  />
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
 
       {/* Servicio: días que le quedan + días que el trabajo está frenado por su parte.
           Si el proyecto está en pausa no se muestra ninguno de los dos: los relojes
@@ -277,6 +251,29 @@ export default function InicioScreen() {
           ? <a href={`https://wa.me/${wa}`} target="_blank" rel="noreferrer" style={{ color: T.primary, fontWeight: 700 }}>Escríbenos por WhatsApp.</a>
           : <b style={{ color: T.text2 }}>Escríbenos por WhatsApp.</b>}
       </div>
+
+      {/* El video, en una hoja como el resto (perfil, accesos, guías, reglas). */}
+      {verVideo && videoPlataforma && (
+        <div onClick={() => setVerVideo(false)}
+          style={{ position: 'fixed', inset: 0, zIndex: 60, background: 'rgba(10,22,40,.45)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
+          <div onClick={(e) => e.stopPropagation()} className="mk-sheet"
+            style={{ background: '#FFFFFF', borderRadius: '22px 22px 0 0', maxHeight: '86vh', overflowY: 'auto', padding: '8px 18px 24px' }}>
+            <div style={{ width: 44, height: 5, borderRadius: 999, background: '#E2E5EB', margin: '10px auto 16px' }} />
+            <h2 style={{ margin: '0 0 4px', fontSize: 22, fontWeight: 800, color: '#1A1D26', letterSpacing: '-0.02em' }}>
+              Cómo se usa la plataforma
+            </h2>
+            <p style={{ margin: '0 0 14px', fontSize: 13.5, lineHeight: 1.5, color: T.text2 }}>
+              Un video corto: dónde está cada cosa y qué te vamos a ir pidiendo.
+            </p>
+            <div style={{ position: 'relative', paddingTop: '56.25%', borderRadius: 14, overflow: 'hidden', background: '#000' }}>
+              <iframe
+                src={urlEmbed(videoPlataforma)} title="Cómo se usa la plataforma" allowFullScreen
+                style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', border: 0 }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
 
       {perfil && <PerfilSheet clientName={clientName} onClose={() => setPerfil(false)} onAccesos={() => { setPerfil(false); setAcc(true); }} onGuias={() => { setPerfil(false); setTut(true); }} onReglas={() => { setPerfil(false); setReg(true); }} />}
       {acc && <AccesosSheet onClose={() => setAcc(false)} />}
