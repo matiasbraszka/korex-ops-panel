@@ -410,10 +410,26 @@ export default function Campo({
     switch (q.tipo) {
       case 'abierta':
         return (
-          <Abierta
-            q={q} valor={valor} onChange={onChange} onVoz={onVoz}
-            onAudioPendiente={onAudioPendiente} clientHint={clientHint}
-          />
+          <>
+            <Abierta
+              q={q} valor={valor} onChange={onChange} onVoz={onVoz}
+              onAudioPendiente={onAudioPendiente} clientHint={clientHint}
+            />
+            {/* Una pregunta de texto puede además pedir archivos: alcanza con darle
+                una carpeta (bucket_key) desde el constructor. Es lo que hace falta en
+                los casos de éxito, donde la captura del antes/después dice más que
+                cualquier descripción. Van a la misma carpeta del panel de siempre. */}
+            {q.bucket && (
+              <div style={{ marginTop: 12 }}>
+                <CampoArchivos q={q} bloqueante={bloqueante} compacto />
+                {q.archivoHint && (
+                  <div style={{ fontSize: 12, color: T.faint, lineHeight: 1.5, marginTop: 7 }}>
+                    {q.archivoHint}
+                  </div>
+                )}
+              </div>
+            )}
+          </>
         );
       case 'opciones':
       case 'si_no':

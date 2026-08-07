@@ -19,7 +19,10 @@ const peso = (b) => (b / 1024 > 1024
   ? `${(b / 1048576).toFixed(1)} MB`
   : `${Math.round(b / 1024)} KB`);
 
-export default function CampoArchivos({ q, bloqueante }) {
+// `compacto`: la misma subida pero como ANEXO de una pregunta de texto (ej. los
+// casos de éxito, donde la captura del "antes/después" vale más que la descripción).
+// Ahí la zona grande de arrastrar compite con el campo de escribir, así que se achica.
+export default function CampoArchivos({ q, bloqueante, compacto = false }) {
   const { subiendo, registrarSubida, setEstado } = useOnboarding();
   const inputRef = useRef(null);
   const [encima, setEncima] = useState(false);
@@ -63,29 +66,33 @@ export default function CampoArchivos({ q, bloqueante }) {
         onDragLeave={() => setEncima(false)}
         onDrop={(e) => { e.preventDefault(); setEncima(false); elegir(e.dataTransfer.files); }}
         style={{
-          display: 'flex', flexDirection: 'column', alignItems: 'center',
+          display: 'flex', alignItems: 'center',
           justifyContent: 'center', gap: 10,
           border: `1.5px dashed ${encima ? T.azul : T.lineTrazo}`,
-          borderRadius: 18, background: encima ? T.azulWash2 : '#fff',
-          padding: '30px 20px', cursor: 'pointer', textAlign: 'center',
+          borderRadius: compacto ? 14 : 18, background: encima ? T.azulWash2 : '#fff',
+          padding: compacto ? '14px 16px' : '30px 20px', cursor: 'pointer', textAlign: 'center',
+          flexDirection: compacto ? 'row' : 'column',
           transition: 'border-color .15s, background .15s',
         }}>
         <div style={{
-          width: 44, height: 44, borderRadius: 13, background: T.azulWash,
+          width: compacto ? 30 : 44, height: compacto ? 30 : 44, flex: 'none',
+          borderRadius: compacto ? 9 : 13, background: T.azulWash,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
         }}>
-          <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke={T.azul}
+          <svg width={compacto ? 15 : 21} height={compacto ? 15 : 21} viewBox="0 0 24 24" fill="none" stroke={T.azul}
                strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
             <path d="M17 8l-5-5-5 5" /><path d="M12 3v12" />
           </svg>
         </div>
-        <div style={{ fontSize: 14.5, fontWeight: 700, letterSpacing: '-.01em' }}>
+        <div style={{ fontSize: compacto ? 13.5 : 14.5, fontWeight: 700, letterSpacing: '-.01em' }}>
           {q.archivoCta || 'Sube tus archivos'}
         </div>
-        <div style={{ fontSize: 12.5, color: T.faint, lineHeight: 1.5, maxWidth: 340 }}>
-          {q.archivoHint || ''}
-        </div>
+        {!compacto && (
+          <div style={{ fontSize: 12.5, color: T.faint, lineHeight: 1.5, maxWidth: 340 }}>
+            {q.archivoHint || ''}
+          </div>
+        )}
         <input
           ref={inputRef} type="file" hidden
           multiple={q.archivoMultiple !== false}
