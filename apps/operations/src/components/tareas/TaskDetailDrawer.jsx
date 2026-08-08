@@ -1,16 +1,17 @@
 import { useMemo, useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { X, Plus, Trash2, MessageSquare, Lock, RotateCcw, Clock, AlignLeft, ListChecks, ClipboardCheck, Check, Send, GripVertical, Zap, FileText, LayoutGrid, Settings } from 'lucide-react';
+import { X, Plus, Trash2, MessageSquare, Lock, RotateCcw, Clock, AlignLeft, ListChecks, ClipboardCheck, Check, Send, GripVertical, Zap, FileText, LayoutGrid } from 'lucide-react';
 import { sbFetch } from '@korex/db';
 import { useApp } from '../../context/AppContext';
 import { setCfgJump } from '../clientes/funnels/cfgJump';
 import { TASK_STATUS } from '../../utils/constants';
-import { getAllPhases, isSprintLocked, canValidate, pendingCriteria, sprintCount, computeStatusDurations, computeSprintDurations, fmtDuration, buildChecklistFromTemplate, DEFAULT_CHECKLIST_TEMPLATES } from '../../utils/helpers';
+import { getAllPhases, isSprintLocked, canValidate, pendingCriteria, sprintCount, computeStatusDurations, computeSprintDurations, fmtDuration } from '../../utils/helpers';
 import DepartmentPicker from './DepartmentPicker';
 import PriorityPicker from './PriorityPicker';
 import AddToWeeklyButton from './AddToWeeklyButton';
 import PersonAvatar from './PersonAvatar';
 import FunnelPanoramaBlock from './FunnelPanoramaBlock';
+import ChecklistTandas from './ChecklistTandas';
 
 const ACC = '#5B7CF5';
 const mkId = () => 'cl_' + Math.random().toString(36).slice(2, 9);
@@ -46,7 +47,7 @@ export default function TaskDetailDrawer({ taskId, onClose }) {
   const {
     tasks, clients, teamMembers, currentUser, updateTask, removeTaskFromSprint, deleteTask,
     taskComments, addTaskComment, deleteTaskComment, sprints, activeSprint, moveTaskToSprint, createSprint,
-    strategyPages, markTaskViewed, markTaskCommentsRead, appSettings, setSelectedId,
+    strategyPages, markTaskViewed, markTaskCommentsRead, setSelectedId,
   } = useApp();
   const navigate = useNavigate();
   const isAdmin = !!(currentUser?.isAdmin || currentUser?.role === 'COO');
@@ -87,15 +88,6 @@ export default function TaskDetailDrawer({ taskId, onClose }) {
     return meta?.titulo ? `V${v} · ${meta.titulo}` : `V${v}`;
   };
 
-  // Tandas de checklist pre-armadas. Se configuran en Configuración › Checklists
-  // de tareas; si todavía no hay ninguna guardada, se ofrece la de ejemplo.
-  // Una lista vacía es una decisión guardada ("no quiero ninguna"), no "falta
-  // configurar": solo se ofrece la de ejemplo mientras nadie tocó la configuración.
-  const checklistTemplates = useMemo(() => {
-    const fromDb = appSettings?.checklist_templates;
-    const list = Array.isArray(fromDb) ? fromDb : DEFAULT_CHECKLIST_TEMPLATES;
-    return list.filter(t => t && t.id && t.nombre && Array.isArray(t.items) && t.items.length > 0);
-  }, [appSettings]);
   // Invitado ("mover y marcar"): la ficha queda de SOLO LECTURA para metadatos y
   // estructura. Sí puede: marcar/validar (footer), tildar checklist y criterios
   // (marcar avance) y comentar. No puede: editar título, reasignar responsable/
@@ -143,15 +135,7 @@ export default function TaskDetailDrawer({ taskId, onClose }) {
   const addItem = () => { const v = newItem.trim(); if (!v) return; const item = { id: mkId(), text: v, done: false }; mutChecklist(l => [...l, item]); setNewItem(''); };
   const toggleItem = (id) => mutChecklist(l => l.map(i => i.id === id ? { ...i, done: !i.done } : i));
   const removeItem = (id) => mutChecklist(l => l.filter(i => i.id !== id));
-  // Cargar una tanda pre-armada: los ítems se calculan afuera del updater (ids
-  // incluidos) para que la mutación siga siendo pura, igual que addItem.
-  const cargarTanda = (tplId) => {
-    const tpl = checklistTemplates.find(t => t.id === tplId);
-    if (!tpl) return;
-    const nuevos = buildChecklistFromTemplate(tpl);
-    if (!nuevos.length) return;
-    mutChecklist(l => [...l, ...nuevos]);
-  };
+  // (Cargar una tanda vive en ChecklistTandas, que también las crea y las edita.)
   // Reordenar la checklist arrastrando (soltar el ítem `fromId` sobre `toId`).
   const moveChecklist = (fromId, toId) => {
     if (!fromId || fromId === toId) return;
@@ -443,25 +427,12 @@ export default function TaskDetailDrawer({ taskId, onClose }) {
                   <input value={newItem} onChange={(e) => setNewItem(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addItem(); } }} placeholder="Agregar subtarea…" style={inputStyle} />
                   <button onClick={addItem} style={addBtnStyle}><Plus size={16} /></button>
                 </div>
-                {/* Tandas pre-armadas: cargan varias subtareas de una. Se AGREGAN al
-                    final — nunca pisan lo que ya está. Se crean y se editan en
-                    Configuración › Checklists de tareas, y el link va SIEMPRE: sin él,
-                    quien no tenga ninguna cargada no tiene forma de saber que existen
-                    ni dónde armarlas. */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
-                  {checklistTemplates.length > 0 && (
-                    <select value="" onChange={(e) => { cargarTanda(e.target.value); e.target.value = ''; }}
-                      style={{ flex: 1, minWidth: 0, fontSize: 12, color: '#6B7280', border: '1px dashed #D0D5DD', borderRadius: 9, padding: '10px 11px', outline: 'none', background: '#FAFBFC', cursor: 'pointer', fontFamily: 'inherit' }}>
-                      <option value="">+ Cargar una tanda pre-armada…</option>
-                      {checklistTemplates.map(t => <option key={t.id} value={t.id}>{t.nombre} · {(t.items || []).length} ítems</option>)}
-                    </select>
-                  )}
-                  <button onClick={() => { onClose(); navigate('/admin/settings'); }}
-                    title="Crear, editar o borrar tandas (Configuración › Checklists de tareas)"
-                    style={{ flex: checklistTemplates.length ? 'none' : 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, height: 39, padding: '0 11px', fontSize: 12, fontWeight: 600, color: '#6B7280', border: '1px dashed #D0D5DD', borderRadius: 9, background: '#FAFBFC', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
-                    <Settings size={13} />{checklistTemplates.length ? 'Administrar' : 'Crear tandas de checklist'}
-                  </button>
-                </div>
+                {/* Tandas: cargar, crear con lo que ya está escrito acá, renombrar y
+                    borrar — todo desde la tarea. Antes solo se podían cargar y había
+                    que ir a Configuración para armarlas, así que no las armaba nadie:
+                    la tanda se te ocurre escribiendo la checklist por tercera vez, no
+                    entrando a Configuración. */}
+                <ChecklistTandas checklist={checklist} onCargar={(nuevos) => mutChecklist(l => [...l, ...nuevos])} />
               </div>
             </div>
           )}
