@@ -33,6 +33,9 @@ const enforceLinkSafety = (html) => {
     const cleaned = attrs
       .replace(/\s*target\s*=\s*("[^"]*"|'[^']*'|\S+)/gi, '')
       .replace(/\s*rel\s*=\s*("[^"]*"|'[^']*'|\S+)/gi, '');
+    // Los enlaces INTERNOS (#sec-…, las menciones @ a otra hoja del DEL) no llevan
+    // target: abrirlos en otra pestaña sería absurdo, están en este mismo documento.
+    if (/href\s*=\s*("#|'#|#)/i.test(cleaned)) return `<a${cleaned}>`;
     return `<a${cleaned} target="_blank" rel="noopener noreferrer">`;
   });
 };

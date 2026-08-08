@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { esItemDeChecklist, clicEnElCuadradito, alternarItem, normalizarChecklists } from '../clientes/funnels/checklistHtml';
 import { Bold, Underline as UnderlineIcon, Italic, Heading1, Heading2, Heading3, List, ListOrdered, ListChecks, Link2, Eraser, Baseline, Table, Image as ImageIcon, UserPlus, PaintBucket, Minus } from 'lucide-react';
 import { sanitizeNoteHtml } from './sanitize';
@@ -54,7 +54,7 @@ const headingLevel = (el) => Number(el.tagName[1]);
 // galería de Recursos); si no, el editor hace la versión simple (pegar link / plantilla).
 // `onUploadImage(file) => url` habilita subir imágenes desde la computadora: por el
 // botón de imagen, pegando (Ctrl+V) o arrastrándolas al texto.
-export default function RichTextEditor({ value, onChange, placeholder = 'Escribí acá…', minHeight = 180, sanitize = sanitizeNoteHtml, delTools = false, richTools = false, onInsertImage, onNewAvatar, onUploadImage, noToolbar = false, onActive }) {
+export default function RichTextEditor({ value, onChange, placeholder = 'Escribí acá…', minHeight = 180, sanitize = sanitizeNoteHtml, delTools = false, richTools = false, onInsertImage, onNewAvatar, onUploadImage, noToolbar = false, onActive, hojas = [] }) {
   // El DEL trae todas las herramientas de documento; las notas piden solo estas.
   const rich = delTools || richTools;
   const ref = useRef(null);
@@ -197,10 +197,58 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Escrib�
 
   const handleInput = () => {
     if (!ref.current) return;
+    detectarArroba();
     const raw = ref.current.innerHTML;
     const clean = sanitize(raw);
     lastInjected.current = clean;
     onChange?.(clean);
+  };
+
+  // ── Enlazar otra hoja del DEL escribiendo @ ─────────────────────────────────
+  // Se escribe @ y las primeras letras del nombre de la hoja; al elegirla queda un
+  // enlace que, con un clic, lleva ahí. El enlace es un ancla interna (#sec-<id>) a
+  // propósito: las secciones ya se dibujan con ese id, así que no hace falta inventar
+  // ni un atributo nuevo (que el sanitizador tiraría) ni una tabla de vínculos.
+  const [arroba, setArroba] = useState(null);   // { q, top, left } o null
+  const [arrobaSel, setArrobaSel] = useState(0);
+  const hojasFiltradas = useMemo(() => {
+    if (!arroba) return [];
+    const q = (arroba.q || '').toLowerCase();
+    return (hojas || []).filter(h => !q || (h.titulo || '').toLowerCase().includes(q)).slice(0, 7);
+  }, [arroba, hojas]);
+
+  const detectarArroba = () => {
+    if (!hojas?.length || !rootRef.current) { setArroba(null); return; }
+    const sel = window.getSelection();
+    const nodo = sel?.anchorNode;
+    if (!sel?.isCollapsed || !nodo || nodo.nodeType !== 3 || !ref.current?.contains(nodo)) { setArroba(null); return; }
+    const antes = nodo.textContent.slice(0, sel.anchorOffset);
+    // @ pegado a un carácter de palabra no cuenta (un mail, por ejemplo).
+    const m = antes.match(/(^|[\s(])@([^\s@]{0,30})$/u);
+    if (!m) { setArroba(null); return; }
+    const r = sel.getRangeAt(0).cloneRange();
+    const caja = r.getBoundingClientRect();
+    const raiz = rootRef.current.getBoundingClientRect();
+    setArroba({ q: m[2], largo: m[2].length + 1, top: caja.bottom - raiz.top + 4, left: Math.max(8, caja.left - raiz.left) });
+    setArrobaSel(0);
+  };
+
+  const elegirHoja = (h) => {
+    const sel = window.getSelection();
+    const nodo = sel?.anchorNode;
+    if (!nodo || !arroba) { setArroba(null); return; }
+    snapshot(true);
+    // Se borra el "@loquesea" tipeado y en su lugar va el enlace.
+    const r = document.createRange();
+    r.setStart(nodo, Math.max(0, sel.anchorOffset - arroba.largo));
+    r.setEnd(nodo, sel.anchorOffset);
+    r.deleteContents();
+    sel.removeAllRanges();
+    sel.addRange(r);
+    document.execCommand('insertHTML', false,
+      `<a href="#sec-${h.id}">@${(h.titulo || 'hoja').replace(/</g, '&lt;')}</a>&nbsp;`);
+    setArroba(null);
+    handleInput();
   };
 
   // ── Historial propio de deshacer ─────────────────────────────────────────────
@@ -340,6 +388,13 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Escrib�
   // estado (agrupado en ráfagas de ~1s, así un Ctrl+Z deshace de a frases, no letra
   // por letra).
   const handleKeyDown = (e) => {
+    // Con el selector de hojas abierto, las flechas y Enter son suyas.
+    if (arroba && hojasFiltradas.length) {
+      if (e.key === 'ArrowDown') { e.preventDefault(); setArrobaSel(i => (i + 1) % hojasFiltradas.length); return; }
+      if (e.key === 'ArrowUp') { e.preventDefault(); setArrobaSel(i => (i - 1 + hojasFiltradas.length) % hojasFiltradas.length); return; }
+      if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); elegirHoja(hojasFiltradas[arrobaSel] || hojasFiltradas[0]); return; }
+      if (e.key === 'Escape') { e.preventDefault(); setArroba(null); return; }
+    }
     const mod = e.ctrlKey || e.metaKey;
     if (mod) {
       const k = e.key.toLowerCase();
@@ -865,6 +920,25 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Escrib�
         className="rte-content py-2.5 pr-3 pl-7 text-[13px] font-sans outline-none text-gray-800 leading-relaxed"
         style={{ minHeight }}
       />
+
+      {/* Selector de hojas del DEL: aparece al escribir @ y deja enlazar otra hoja
+          del mismo documento. Se elige con las flechas y Enter, o con un clic. */}
+      {arroba && hojasFiltradas.length > 0 && (
+        <div className="absolute z-40 w-[280px] rounded-xl border border-gray-200 bg-white py-1 shadow-[0_12px_32px_rgba(10,22,40,.16)]"
+          style={{ top: arroba.top, left: arroba.left }}>
+          <div className="px-3 pb-1 pt-0.5 text-[9.5px] font-extrabold uppercase tracking-[0.08em] text-gray-400">Enlazar otra hoja</div>
+          {hojasFiltradas.map((h, i) => (
+            <button key={h.id}
+              onMouseDown={(e) => { e.preventDefault(); elegirHoja(h); }}
+              onMouseEnter={() => setArrobaSel(i)}
+              className={`flex w-full items-center gap-2 border-none px-3 py-1.5 text-left cursor-pointer ${i === arrobaSel ? 'bg-blue-50' : 'bg-transparent'}`}>
+              {h.color && <span className="h-[7px] w-[7px] shrink-0 rounded-full" style={{ background: h.color }} />}
+              <span className="min-w-0 flex-1 truncate text-[12.5px] font-semibold text-gray-800">{h.titulo}</span>
+              {h.cat && <span className="shrink-0 text-[10px] text-gray-400">{h.cat}</span>}
+            </button>
+          ))}
+        </div>
+      )}
 
       {subiendo && (
         <div className="absolute right-2 bottom-2 z-30 flex items-center gap-1.5 bg-white border border-[#E2E5EB] rounded-lg py-1 px-2 text-[11.5px] font-semibold text-[#4B5563]" style={{ boxShadow: '0 6px 18px rgba(10,22,40,.16)' }}>

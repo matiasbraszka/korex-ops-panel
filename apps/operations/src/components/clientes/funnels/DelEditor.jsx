@@ -1175,6 +1175,16 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, sibling
   const engancharSeccion = (el, s) => {
     if (!el) return;
     el.__chkOff?.();
+    // Clic en un enlace interno (@otra hoja) → se abre esa hoja en vez de recargar.
+    el.__lnkOff?.();
+    const onLink = (e) => {
+      const a = e.target?.closest?.('a[href^="#sec-"]');
+      if (!a || !el.contains(a)) return;
+      e.preventDefault();
+      irA(a.getAttribute('href').slice(5));
+    };
+    el.addEventListener('click', onLink);
+    el.__lnkOff = () => el.removeEventListener('click', onLink);
     el.__chkOff = engancharChecklist(el, {
       alCambiar: (html) => {
         setSecs((prev) => prev.map(x => (x.id === s.id ? { ...x, html, source: 'panel' } : x)));
@@ -1349,6 +1359,11 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, sibling
     const puestos = new Set(groups.map(g => g.kind));
     return STANDARD_KINDS.filter(k => !puestos.has(k));
   }, [groups, STANDARD_KINDS]);
+
+  // Las hojas que se pueden enlazar con @ desde el editor: todas las del documento
+  // que se está viendo (cada sección se saca a sí misma al pasarlas).
+  const hojasDelDoc = groups.flatMap(g => g.items)
+    .map(x => ({ id: x.id, titulo: x.title, cat: secOf(x.kind).label, color: secOf(x.kind).c }));
 
   const irA = (id) => {
     setActiva(id);
@@ -2426,6 +2441,7 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, sibling
                       onActive={setActiveApi}
                       onInsertImage={abrirSelectorImagen}
                       onUploadImage={subirImagenDel}
+                      hojas={hojasDelDoc.filter(h => h.id !== s.id)}
                       onNewAvatar={(name) => crearAvatarSection(name)}
                       minHeight={90}
                       placeholder="Escribí acá el contenido de la sección…"
