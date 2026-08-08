@@ -5,6 +5,8 @@ import { Loader2, AlertCircle, FileText, ExternalLink, Plus, Trash2, Check, Penc
 import { sbFetch, supabase } from '@korex/db';
 import { useApp } from '../../../context/AppContext';
 import RichTextEditor from '../../notas/RichTextEditor';
+import { uploadDelImagen } from '../../notas/imagenes';
+import { engancharChecklist } from './checklistHtml';
 import { sanitizeDelHtml } from './delSanitize';
 import { getCfgJump, clearCfgJump } from './cfgJump';
 import { BLUEPRINTS } from './blueprints';
@@ -1163,6 +1165,31 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, sibling
     }
     setTimeout(() => setFlashCmt(null), 1800);
   };
+
+  // Tildar los cuadraditos de una checklist leyendo el documento (sin entrar a
+  // editar). Se engancha por sección; el HTML resultante se guarda igual que una
+  // edición normal, así lo ve el resto del equipo y el cliente en su portal.
+  // El "desenganchar" se guarda en el propio nodo: cuando React lo desmonta se va con
+  // él, y en cada re-render se suelta el anterior antes de enganchar el nuevo. Así no
+  // hace falta un registro aparte que haya que limpiar a mano.
+  const engancharSeccion = (el, s) => {
+    if (!el) return;
+    el.__chkOff?.();
+    el.__chkOff = engancharChecklist(el, {
+      alCambiar: (html) => {
+        setSecs((prev) => prev.map(x => (x.id === s.id ? { ...x, html, source: 'panel' } : x)));
+        supabase.rpc('del_section_save', { p_id: s.id, p_html: html, p_by: by })
+          .then(({ error }) => { if (!error) emitir('section', { row: { id: s.id, html, source: 'panel' } }); });
+      },
+    });
+  };
+
+  // Pegar (Ctrl+V), arrastrar o subir una imagen adentro del documento. Faltaba el
+  // cable: el editor ya sabía hacerlo —las notas lo usan— pero el DEL nunca le pasó
+  // esta función, así que pegar una captura no hacía nada. Van a su propia carpeta
+  // del bucket de imágenes internas, no a Recursos: un recorte pegado en el texto es
+  // parte del documento, no material del cliente.
+  const subirImagenDel = useCallback((file) => uploadDelImagen(cid, file), [cid]);
 
   // El botón de imagen del DEL abre las imágenes de Recursos del funnel (en vez de
   // pedir un link a mano) y la elegida se inserta en el texto. Conecta Recursos ↔ DEL.
@@ -2398,13 +2425,17 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, sibling
                       noToolbar
                       onActive={setActiveApi}
                       onInsertImage={abrirSelectorImagen}
+                      onUploadImage={subirImagenDel}
                       onNewAvatar={(name) => crearAvatarSection(name)}
                       minHeight={90}
                       placeholder="Escribí acá el contenido de la sección…"
                     />
                   </div>
                 ) : s.html ? (
-                  <div className="del-rich py-7 px-10 text-[13.5px] leading-[1.62] text-[#2A2E3A] break-words" style={{ maxWidth: '115ch', padding: isMobile ? '20px 16px' : undefined, zoom: zoomDoc / 100 }}
+                  // Leyendo, los cuadraditos de las checklists se tildan con un clic
+                  // en cualquier parte del ítem (ver checklistHtml.js).
+                  <div ref={(el) => engancharSeccion(el, s)}
+                    className="del-rich py-7 px-10 text-[13.5px] leading-[1.62] text-[#2A2E3A] break-words" style={{ maxWidth: '115ch', padding: isMobile ? '20px 16px' : undefined, zoom: zoomDoc / 100 }}
                     dangerouslySetInnerHTML={{ __html: highlightHtml(sanitizeDelHtml(s.html), scomments) }} />
                 ) : (
                   <div className="py-7 px-10 text-[13.5px] leading-[1.62] text-[#2A2E3A] whitespace-pre-wrap break-words" style={{ maxWidth: '115ch', padding: isMobile ? '20px 16px' : undefined, zoom: zoomDoc / 100 }}>
@@ -2512,6 +2543,7 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, sibling
                     onChange={(html) => saveClientDoc(doc, html)}
                     sanitize={sanitizeDelHtml}
                     delTools
+                    onUploadImage={subirImagenDel}
                     minHeight={320}
                     placeholder="Escribí acá…"
                   />
@@ -2560,6 +2592,7 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, sibling
                     onChange={(html) => saveGuia(g, html)}
                     sanitize={sanitizeDelHtml}
                     delTools
+                    onUploadImage={subirImagenDel}
                     minHeight={320}
                     placeholder="Escribí acá la guía (el cliente la ve tal cual en su portal)…"
                   />

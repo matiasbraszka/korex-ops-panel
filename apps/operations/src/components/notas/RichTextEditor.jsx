@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { esItemDeChecklist, clicEnElCuadradito, alternarItem, normalizarChecklists } from '../clientes/funnels/checklistHtml';
 import { Bold, Underline as UnderlineIcon, Italic, Heading1, Heading2, Heading3, List, ListOrdered, ListChecks, Link2, Eraser, Baseline, Table, Image as ImageIcon, UserPlus, PaintBucket, Minus } from 'lucide-react';
 import { sanitizeNoteHtml } from './sanitize';
 
@@ -180,6 +181,9 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Escrib�
     // asi no pisamos lo que el usuario va tipeando.
     if (lastInjected.current !== value) {
       ref.current.innerHTML = value || '';
+      // Las checklists escritas antes traen el cuadradito afuera del ítem y ahí no
+      // se puede clickear. Se acomodan al mostrarlas, sin migrar nada guardado.
+      normalizarChecklists(ref.current);
       lastInjected.current = value || '';
     }
   }, [value]);
@@ -407,12 +411,12 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Escrib�
       handleInput();
     } else if (ul) {
       // Era lista de viñetas: la convierte en checklist.
-      mutarNodo(ul, (c) => { c.style.listStyleType = CHECK_MARKER; });
+      mutarNodo(ul, (c) => { c.style.listStyleType = CHECK_MARKER; c.style.listStylePosition = 'inside'; });
     } else {
       snapshot(true);
       document.execCommand('insertUnorderedList');
       ul = closestUl();
-      if (ul) ul.style.listStyleType = CHECK_MARKER;
+      if (ul) { ul.style.listStyleType = CHECK_MARKER; ul.style.listStylePosition = 'inside'; }
       handleInput();
     }
     ref.current?.focus();
@@ -677,6 +681,17 @@ export default function RichTextEditor({ value, onChange, placeholder = 'Escrib�
   };
 
   const handleClick = (e) => {
+    // Checklist: clic en el cuadradito lo tilda o lo destilda. Solo cuenta la franja
+    // del marcador —los primeros píxeles del ítem— así hacer clic en el texto sigue
+    // sirviendo para escribir, que es lo que uno espera editando.
+    const li = e.target?.closest?.('li');
+    if (li && ref.current?.contains(li) && esItemDeChecklist(li) && clicEnElCuadradito(e, li, true)) {
+      e.preventDefault();
+      snapshot(true);
+      alternarItem(li);
+      handleInput();
+      return;
+    }
     // Selección de imagen: click en la imagen → menú de tamaño/reemplazar/quitar.
     if (rich && e.target.tagName === 'IMG' && ref.current?.contains(e.target)) {
       e.preventDefault();
