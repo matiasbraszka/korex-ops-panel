@@ -570,6 +570,25 @@ export const DEFAULT_PENDING_RESOURCES = [
   { id: 'meta-session',  label: 'Agendar sesión para configurar Meta de FB/IG',           description: 'Coordinar llamada con nuestro equipo para dejar el Business Manager listo.' },
 ];
 
+// Tandas de checklist pre-armadas para las tareas. En vez de escribir las mismas
+// subtareas una y otra vez, se elige una tanda y se cargan todas de golpe.
+// Se guardan en app_settings.checklist_templates; esto es solo el arranque, y el
+// admin las edita en Configuración › Checklists de tareas.
+// Forma: { id, nombre, items: [texto, ...] }.
+export const DEFAULT_CHECKLIST_TEMPLATES = [
+  { id: 'tpl_landings', nombre: 'Diseño de landings', items: ['Testimonios', 'Fotos de autoridad', 'VSL editado', 'Branding'] },
+];
+
+// Convierte una tanda en ítems de checklist listos para pegar en una tarea.
+// Los ids se generan acá (y no en el componente) para que la mutación sea pura.
+export function buildChecklistFromTemplate(tpl) {
+  const items = Array.isArray(tpl?.items) ? tpl.items : [];
+  return items
+    .map((t) => String(t || '').trim())
+    .filter(Boolean)
+    .map((text, i) => ({ id: 'cl_' + Date.now().toString(36) + i + Math.random().toString(36).slice(2, 6), text, done: false }));
+}
+
 // Crea los "recursos pendientes" iniciales para un cliente nuevo a partir de
 // la plantilla configurada (app_settings.pending_resources_template). Si no
 // hay plantilla, usa DEFAULT_PENDING_RESOURCES. Cada item arranca con
@@ -684,12 +703,13 @@ export function mkTask(title, clientId, assignee, priority, status, notes, stepI
     stepIdx: stepIdx !== undefined && stepIdx !== null && stepIdx !== '' ? parseInt(stepIdx) : null,
     status: status || 'backlog', notes: notes || '', description: '', createdDate: today(),
     startedDate: null, completedDate: null, blockedSince: null, dueDate: null,
-    definitionOfDone: '', acceptanceCriteria: [], reviewer: null, reviewReason: '',
+    acceptanceCriteria: [], reviewer: null,
     validatedBy: null, validatedAt: null, sprintHistory: [], statusHistory: [],
     createdBy: null,
     // El funnel se elige después, en el detalle de la tarea. Al crearla no se pide:
     // el cliente ya la ata a algo, y obligar a elegir funnel frenaría el alta rápida.
-    funnelId: null,
+    // La versión del DEL cuelga del funnel: sin funnel elegido no hay versión.
+    funnelId: null, delVersion: null,
   };
 }
 
@@ -1132,15 +1152,16 @@ export function fmtDuration(days) {
   return '<1m';
 }
 
-// Criterios de aceptación obligatorios: la tarea solo se puede validar si TODOS
-// están tildados. Sin criterios → no se gatea (compat con tareas existentes).
+// "Cambios a realizar" (columna acceptance_criteria) obligatorios: la tarea solo se
+// puede validar si TODOS están tildados. Sin cambios anotados → no se gatea (compat
+// con las tareas que ya existían).
 export function canValidate(task) {
   const ac = Array.isArray(task?.acceptanceCriteria) ? task.acceptanceCriteria : [];
   if (ac.length === 0) return true;
   return ac.every(c => c.done);
 }
 
-// Cantidad de criterios de aceptación sin completar.
+// Cantidad de "cambios a realizar" sin completar.
 export function pendingCriteria(task) {
   const ac = Array.isArray(task?.acceptanceCriteria) ? task.acceptanceCriteria : [];
   return ac.filter(c => !c.done).length;

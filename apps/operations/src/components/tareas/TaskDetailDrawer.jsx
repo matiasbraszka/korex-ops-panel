@@ -1,12 +1,16 @@
-import { useMemo, useState, useEffect } from 'react';
-import { X, Plus, Trash2, MessageSquare, Lock, RotateCcw, Clock, AlignLeft, ListChecks, ClipboardCheck, Check, Send, GripVertical, Zap } from 'lucide-react';
+import { useMemo, useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { X, Plus, Trash2, MessageSquare, Lock, RotateCcw, Clock, AlignLeft, ListChecks, ClipboardCheck, Check, Send, GripVertical, Zap, FileText, LayoutGrid } from 'lucide-react';
+import { sbFetch } from '@korex/db';
 import { useApp } from '../../context/AppContext';
+import { setCfgJump } from '../clientes/funnels/cfgJump';
 import { TASK_STATUS } from '../../utils/constants';
-import { getAllPhases, isSprintLocked, canValidate, pendingCriteria, sprintCount, computeStatusDurations, computeSprintDurations, fmtDuration } from '../../utils/helpers';
+import { getAllPhases, isSprintLocked, canValidate, pendingCriteria, sprintCount, computeStatusDurations, computeSprintDurations, fmtDuration, buildChecklistFromTemplate, DEFAULT_CHECKLIST_TEMPLATES } from '../../utils/helpers';
 import DepartmentPicker from './DepartmentPicker';
 import PriorityPicker from './PriorityPicker';
 import AddToWeeklyButton from './AddToWeeklyButton';
 import PersonAvatar from './PersonAvatar';
+import FunnelPanoramaBlock from './FunnelPanoramaBlock';
 
 const ACC = '#5B7CF5';
 const mkId = () => 'cl_' + Math.random().toString(36).slice(2, 9);
@@ -42,8 +46,9 @@ export default function TaskDetailDrawer({ taskId, onClose }) {
   const {
     tasks, clients, teamMembers, currentUser, updateTask, removeTaskFromSprint, deleteTask,
     taskComments, addTaskComment, deleteTaskComment, sprints, activeSprint, moveTaskToSprint, createSprint,
-    strategyPages, markTaskViewed, markTaskCommentsRead,
+    strategyPages, markTaskViewed, markTaskCommentsRead, appSettings, setSelectedId,
   } = useApp();
+  const navigate = useNavigate();
   const isAdmin = !!(currentUser?.isAdmin || currentUser?.role === 'COO');
   // Al abrir la tarea: apagar el aviso de "cambió" (P2) y el chip de comentarios sin leer (P6).
   useEffect(() => {
@@ -59,6 +64,36 @@ export default function TaskDetailDrawer({ taskId, onClose }) {
     () => (strategyPages || []).filter(p => p.client_id === task?.clientId),
     [strategyPages, task?.clientId],
   );
+  // Versiones del DEL del funnel elegido (V1, V2… con su título). Se piden solo
+  // cuando hay funnel: son pocas filas y no vale la pena cargarlas para toda la
+  // agencia al arrancar el panel.
+  const funnelSel = useMemo(() => funnelOptions.find(p => p.id === task?.funnelId) || null, [funnelOptions, task?.funnelId]);
+  const delDocId = funnelSel?.del_doc_id || null;
+  // Se cachean por documento: abrir y cerrar la misma tarea no vuelve a pedirlas.
+  const [delVersionsByDoc, setDelVersionsByDoc] = useState({});
+  const versionesPedidas = useRef(new Set());
+  useEffect(() => {
+    if (!delDocId || versionesPedidas.current.has(delDocId)) return undefined;
+    versionesPedidas.current.add(delDocId);
+    let alive = true;
+    sbFetch(`del_versions?select=version,titulo,nota&doc_id=eq.${encodeURIComponent(delDocId)}&order=version.asc`)
+      .then(rows => { if (alive) setDelVersionsByDoc(m => ({ ...m, [delDocId]: Array.isArray(rows) ? rows : [] })); })
+      .catch(() => { versionesPedidas.current.delete(delDocId); });   // reintentar la próxima vez
+    return () => { alive = false; };
+  }, [delDocId]);
+  const delVersions = (delDocId && delVersionsByDoc[delDocId]) || [];
+  const versionLabel = (v) => {
+    const meta = delVersions.find(x => x.version === v);
+    return meta?.titulo ? `V${v} · ${meta.titulo}` : `V${v}`;
+  };
+
+  // Tandas de checklist pre-armadas. Se configuran en Configuración › Checklists
+  // de tareas; si todavía no hay ninguna guardada, se ofrece la de ejemplo.
+  const checklistTemplates = useMemo(() => {
+    const fromDb = appSettings?.checklist_templates;
+    const list = Array.isArray(fromDb) && fromDb.length > 0 ? fromDb : DEFAULT_CHECKLIST_TEMPLATES;
+    return list.filter(t => t && t.id && t.nombre && Array.isArray(t.items) && t.items.length > 0);
+  }, [appSettings]);
   // Invitado ("mover y marcar"): la ficha queda de SOLO LECTURA para metadatos y
   // estructura. Sí puede: marcar/validar (footer), tildar checklist y criterios
   // (marcar avance) y comentar. No puede: editar título, reasignar responsable/
@@ -106,6 +141,15 @@ export default function TaskDetailDrawer({ taskId, onClose }) {
   const addItem = () => { const v = newItem.trim(); if (!v) return; const item = { id: mkId(), text: v, done: false }; mutChecklist(l => [...l, item]); setNewItem(''); };
   const toggleItem = (id) => mutChecklist(l => l.map(i => i.id === id ? { ...i, done: !i.done } : i));
   const removeItem = (id) => mutChecklist(l => l.filter(i => i.id !== id));
+  // Cargar una tanda pre-armada: los ítems se calculan afuera del updater (ids
+  // incluidos) para que la mutación siga siendo pura, igual que addItem.
+  const cargarTanda = (tplId) => {
+    const tpl = checklistTemplates.find(t => t.id === tplId);
+    if (!tpl) return;
+    const nuevos = buildChecklistFromTemplate(tpl);
+    if (!nuevos.length) return;
+    mutChecklist(l => [...l, ...nuevos]);
+  };
   // Reordenar la checklist arrastrando (soltar el ítem `fromId` sobre `toId`).
   const moveChecklist = (fromId, toId) => {
     if (!fromId || fromId === toId) return;
@@ -126,7 +170,7 @@ export default function TaskDetailDrawer({ taskId, onClose }) {
   const removeAc = (id) => mutCriteria(l => l.filter(i => i.id !== id));
 
   const doValidate = () => {
-    if (!canValidate(task)) { setGateMsg(`Faltan ${pendingCriteria(task)} criterio(s) de aceptación para validar.`); setTimeout(() => setGateMsg(''), 5000); return; }
+    if (!canValidate(task)) { const n = pendingCriteria(task); setGateMsg(`${n === 1 ? 'Falta 1 cambio' : `Faltan ${n} cambios`} por realizar antes de validar.`); setTimeout(() => setGateMsg(''), 5000); return; }
     updateTask(task.id, { status: 'done' });
     onClose();
   };
@@ -139,6 +183,21 @@ export default function TaskDetailDrawer({ taskId, onClose }) {
     }
   };
   const onSprintChange = (val) => { if (!val) removeTaskFromSprint(task.id); else moveTaskToSprint(task.id, val); };
+
+  // Ir al funnel de la tarea. El DEL y sus carpetas viven dentro de la ficha del
+  // cliente y no tienen ruta propia: la forma canónica de llegar es dejar la
+  // instrucción en sessionStorage (cfgJump) y abrir el cliente, igual que el Panorama.
+  //   destino 'del'      → una pestaña del documento (campo = kind de la sección)
+  //   destino 'recursos' → una carpeta de material (campo = bucket_key)
+  //   destino 'config'   → la configuración del funnel (campo = data-cfg)
+  const irAFunnel = (campo = 'estrategia', destino = 'del') => {
+    if (!task.clientId || !task.funnelId) return;
+    setCfgJump({ client: task.clientId, funnel: task.funnelId, campo, destino });
+    setSelectedId(task.clientId);
+    onClose();
+    navigate('/operations/clients');
+  };
+  const irAlDel = () => irAFunnel('estrategia', 'del');
 
   // Bloqueo por dependencia ("Bloqueada por").
   const deps = Array.isArray(task.dependsOn) ? task.dependsOn : [];
@@ -180,11 +239,10 @@ export default function TaskDetailDrawer({ taskId, onClose }) {
   // Validación: criterio del footer + punto de la pestaña.
   const critOk = criteria.length === 0 || acDone === criteria.length;
   const okToValidate = pendingBlockers.length === 0 && critOk && !locked;
-  const footerLabel = pendingBlockers.length > 0 ? 'Bloqueada · validá la otra tarea' : (!critOk ? 'Completá los criterios primero' : (locked ? 'Sprint cerrado' : ''));
+  const footerLabel = pendingBlockers.length > 0 ? 'Bloqueada · validá la otra tarea' : (!critOk ? 'Completá los cambios primero' : (locked ? 'Sprint cerrado' : ''));
   // Punto de la pestaña Validación: rojo si está bloqueada por otra; azul si tiene
-  // contenido cargado (definición de hecho o descripción).
-  const hasDescription = !!(String(task.definitionOfDone || '').trim() || String(task.description || '').trim());
-  const valDot = pendingBlockers.length > 0 ? '#EF4444' : (hasDescription ? '#5B7CF5' : null);
+  // cambios anotados por realizar.
+  const valDot = pendingBlockers.length > 0 ? '#EF4444' : (criteria.length > 0 ? '#5B7CF5' : null);
 
   const metaRow = { display: 'grid', gridTemplateColumns: '104px 1fr', alignItems: 'center', gap: 10, padding: '11px 14px', borderBottom: '1px solid #F0F1F4' };
   const metaLabel = { fontSize: 11.5, color: '#6B7280' };
@@ -229,6 +287,14 @@ export default function TaskDetailDrawer({ taskId, onClose }) {
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 9px', borderRadius: 999, background: '#FEF2F2', color: '#DC2626', fontSize: 10, fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase' }}><Lock size={11} />Bloqueada</span>
             )}
             <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+              {/* Acceso directo al DEL del funnel de esta tarea. Usa el mismo salto que
+                  el Panorama (cfgJump + selectedId): el DEL no tiene URL propia. */}
+              {task.clientId && task.funnelId && (
+                <button onClick={irAlDel} title={`Abrir el DEL${funnelSel?.name ? ' de ' + funnelSel.name : ''}`}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 4, height: 26, padding: '0 9px', borderRadius: 999, border: '1px solid #E2E5EB', background: '#fff', color: '#5B7CF5', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+                  <FileText size={12} />DEL
+                </button>
+              )}
               {canEdit && <AddToWeeklyButton task={task} size={17} />}
               <span onClick={onClose} style={{ width: 30, height: 30, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#9CA3AF' }}><X size={17} /></span>
             </span>
@@ -278,10 +344,23 @@ export default function TaskDetailDrawer({ taskId, onClose }) {
               <div style={metaRow}>
                 <span style={metaLabel}>Funnel</span>
                 <select value={task.funnelId || ''} disabled={!canEdit}
-                  onChange={(e) => updateTask(task.id, { funnelId: e.target.value || null })}
+                  onChange={(e) => updateTask(task.id, { funnelId: e.target.value || null, delVersion: null })}
                   style={{ ...selStyle, color: task.funnelId ? '#1A1D26' : '#9CA3AF' }}>
                   <option value="">Sin funnel</option>
                   {funnelOptions.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+              </div>
+            )}
+            {/* Versión del DEL: solo aparece si el funnel tiene más de una. Con una sola
+                no hay nada que elegir y el renglón sería ruido. */}
+            {delVersions.length > 1 && (
+              <div style={metaRow}>
+                <span style={metaLabel}>Versión</span>
+                <select value={task.delVersion ?? ''} disabled={!canEdit}
+                  onChange={(e) => updateTask(task.id, { delVersion: e.target.value === '' ? null : Number(e.target.value) })}
+                  style={{ ...selStyle, color: task.delVersion != null ? '#1A1D26' : '#9CA3AF' }}>
+                  <option value="">Sin definir</option>
+                  {delVersions.map(v => <option key={v.version} value={v.version}>{versionLabel(v.version)}</option>)}
                 </select>
               </div>
             )}
@@ -362,6 +441,15 @@ export default function TaskDetailDrawer({ taskId, onClose }) {
                   <input value={newItem} onChange={(e) => setNewItem(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addItem(); } }} placeholder="Agregar subtarea…" style={inputStyle} />
                   <button onClick={addItem} style={addBtnStyle}><Plus size={16} /></button>
                 </div>
+                {/* Tandas pre-armadas (Configuración › Checklists de tareas): cargan varias
+                    subtareas de una. Se AGREGAN al final — nunca pisan lo que ya está. */}
+                {checklistTemplates.length > 0 && (
+                  <select value="" onChange={(e) => { cargarTanda(e.target.value); e.target.value = ''; }}
+                    style={{ width: '100%', marginTop: 8, fontSize: 12, color: '#6B7280', border: '1px dashed #D0D5DD', borderRadius: 9, padding: '10px 11px', outline: 'none', background: '#FAFBFC', cursor: 'pointer', fontFamily: 'inherit' }}>
+                    <option value="">+ Cargar una tanda pre-armada…</option>
+                    {checklistTemplates.map(t => <option key={t.id} value={t.id}>{t.nombre} · {(t.items || []).length} ítems</option>)}
+                  </select>
+                )}
               </div>
             </div>
           )}
@@ -375,38 +463,35 @@ export default function TaskDetailDrawer({ taskId, onClose }) {
                 </div>
               )}
 
+              {/* "Cambios a realizar" es la lista que hay que cumplir antes de validar
+                  (antes se llamaba "Criterios de aceptación"). Ocupa la pestaña entera:
+                  "Motivo de revisión" y "Definición de hecho" se sacaron — nadie los leía
+                  y ningún proceso del sistema se apoyaba en ellos. */}
               <div style={{ paddingTop: 2 }}>
-                <SectionHead icon={<ClipboardCheck size={15} />} title="Definición de hecho" sub="Cuándo se da por terminada" />
-                <textarea defaultValue={task.definitionOfDone || ''} placeholder="Definí cuándo se considera terminada…" readOnly={!canEdit}
-                  onBlur={(e) => { if (!canEdit) return; const v = e.target.value; if (v !== (task.definitionOfDone || '')) updateTask(task.id, { definitionOfDone: v }); }}
-                  style={{ width: '100%', minHeight: 86, border: '1px solid #E2E5EB', borderRadius: 10, padding: '11px 12px', fontSize: 12.5, lineHeight: 1.55, color: '#1A1D26', resize: 'vertical', outline: 'none', fontFamily: 'inherit' }} />
-              </div>
-
-              {/* Motivo de revisión (P4): por qué la tarea quedó en revisión. Se resalta
-                  cuando está justamente "En revisión". */}
-              <div style={{ marginTop: 18, paddingTop: 18, borderTop: '1px solid #EEF0F3' }}>
-                <SectionHead icon={<MessageSquare size={15} />} title="Motivo de revisión" sub="Por qué está en revisión / qué falta" color="#D97706" bg="#FEF3C7" />
-                <textarea key={task.id} defaultValue={task.reviewReason || ''} placeholder="Anotá por qué esta tarea está en revisión…" readOnly={!canEdit}
-                  onBlur={(e) => { if (!canEdit) return; const v = e.target.value; if (v !== (task.reviewReason || '')) updateTask(task.id, { reviewReason: v }); }}
-                  style={{ width: '100%', minHeight: 72, border: `1px solid ${task.status === 'en-revision' ? '#FCD34D' : '#E2E5EB'}`, background: task.status === 'en-revision' ? '#FFFBEB' : '#fff', borderRadius: 10, padding: '11px 12px', fontSize: 12.5, lineHeight: 1.55, color: '#1A1D26', resize: 'vertical', outline: 'none', fontFamily: 'inherit' }} />
-              </div>
-
-              <div style={{ marginTop: 18, paddingTop: 18, borderTop: '1px solid #EEF0F3' }}>
-                <SectionHead icon={<ListChecks size={15} />} title="Criterios de aceptación" sub="Deben cumplirse antes de validar" color="#16A34A" bg="#ECFDF5"
+                <SectionHead icon={<ClipboardCheck size={15} />} title="Cambios a realizar" sub="Se tienen que cumplir antes de validar" color="#16A34A" bg="#ECFDF5"
                   right={<span style={{ fontSize: 11, fontWeight: 600, color: '#6B7280', background: '#F3F4F6', borderRadius: 999, padding: '2px 9px' }}>{acDone}/{criteria.length}</span>} />
                 {criteria.length > 0 ? (
                   <div style={{ height: 6, borderRadius: 999, background: '#EEF0F3', overflow: 'hidden', marginBottom: 12 }}>
                     <div style={{ width: acPct + '%', height: '100%', background: '#16A34A', borderRadius: 999, transition: 'width .3s ease' }} />
                   </div>
                 ) : (
-                  <div style={{ fontSize: 11.5, lineHeight: 1.5, color: '#9CA3AF', background: '#FAFBFC', border: '1px dashed #E2E5EB', borderRadius: 9, padding: '11px 12px' }}>Sin criterios: la tarea se puede validar libremente. Agregá criterios para exigir que se cumplan antes de validar.</div>
+                  <div style={{ fontSize: 11.5, lineHeight: 1.5, color: '#9CA3AF', background: '#FAFBFC', border: '1px dashed #E2E5EB', borderRadius: 9, padding: '11px 12px' }}>Sin cambios anotados: la tarea se puede validar libremente. Agregá los cambios que hay que hacer para exigir que se cumplan antes de validar.</div>
                 )}
                 <div style={{ display: 'flex', flexDirection: 'column' }}>{criteria.map(it => checkRow(it, '#16A34A', toggleAc, removeAc, null))}</div>
                 <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-                  <input value={newAc} onChange={(e) => setNewAc(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addAc(); } }} placeholder="Agregar criterio de aceptación…" style={inputStyle} />
+                  <input value={newAc} onChange={(e) => setNewAc(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addAc(); } }} placeholder="Agregar cambio a realizar…" style={inputStyle} />
                   <button onClick={addAc} style={addBtnStyle}><Plus size={16} /></button>
                 </div>
               </div>
+
+              {/* Cómo viene el funnel de esta tarea, sin ir hasta la pestaña Panorama.
+                  Solo aparece si la tarea tiene cliente Y funnel bien elegidos. */}
+              {task.clientId && task.funnelId && (
+                <div style={{ marginTop: 18, paddingTop: 18, borderTop: '1px solid #EEF0F3' }}>
+                  <SectionHead icon={<LayoutGrid size={15} />} title="Cómo viene el funnel" sub={funnelSel?.name || 'Qué hay y qué falta'} color="#0891B2" bg="#ECFEFF" />
+                  <FunnelPanoramaBlock funnelId={task.funnelId} onIr={irAFunnel} />
+                </div>
+              )}
 
               <div style={{ marginTop: 18, paddingTop: 18, borderTop: '1px solid #EEF0F3' }}>
                 <SectionHead icon={<Lock size={15} />} title="Bloqueada por" sub="Lo que impide avanzar" color="#DC2626" bg="#FEF2F2" />

@@ -312,8 +312,14 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, sibling
   const [view, setView] = useState(() => {
     const j = getCfgJump();
     if (!j) return 'estrategia';
-    return j.destino === 'del' ? 'del' : 'config';   // salto a una pestaña del DEL vs. a la configuración
+    if (j.destino === 'del') return 'del';           // a una pestaña del documento
+    if (j.destino === 'recursos') return 'recursos'; // a una carpeta de material
+    return 'config';                                 // a la configuración del funnel
   });
+  // Categoría del menú a la que hay que llevar al usuario cuando el salto apunta a
+  // una que todavía no tiene ninguna sección escrita (ej. "Avatares" vacío). Antes
+  // caía en la primera sección del documento y parecía que el enlace estaba roto.
+  const [saltoKind, setSaltoKind] = useState(null);
   const [clientDocs, setClientDocs] = useState([]);
   // Colaboración: comentarios por sección + presencia en vivo + candado de edición.
   const [comments, setComments] = useState([]);      // todos los del DEL
@@ -399,8 +405,15 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, sibling
         if (destinoDel) {
           clearCfgJump();
           setView('del');
-          setActiva(objetivo?.id ?? list[0].id);
-          setSaltoFlash(objetivo?.id ?? null);
+          if (objetivo) {
+            setActiva(objetivo.id);
+            setSaltoFlash(objetivo.id);
+          } else {
+            // La categoría existe en el menú pero está vacía: se lleva al usuario ahí
+            // ("— falta escribir —") en vez de tirarlo en otra sección cualquiera.
+            setActiva((a) => a || list[0].id);
+            setSaltoKind(j.campo);
+          }
         } else {
           // Por defecto abre la sección de Estrategia (si existe); si no, la primera.
           setActiva((a) => a || (list.find((s) => s.kind === 'estrategia')?.id ?? list[0].id));
@@ -440,6 +453,45 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, sibling
     }, 400);
     return () => clearTimeout(t);
   }, [saltoFlash]);
+
+  // Salto a una categoría VACÍA del menú (ej. "Avatares" cuando todavía no hay nada
+  // escrito): no hay sección adonde ir, así que se destaca el grupo del menú, donde
+  // está el "— falta escribir —".
+  useEffect(() => {
+    if (!saltoKind) return undefined;
+    const t = setTimeout(() => {
+      const el = document.querySelector(`[data-kindgroup="${saltoKind}"]`);
+      setSaltoKind(null);
+      if (!el) return;
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      const prev = el.style.boxShadow;
+      el.style.transition = 'box-shadow .25s';
+      el.style.borderRadius = '9px';
+      el.style.boxShadow = '0 0 0 3px #FFD84D';
+      setTimeout(() => { el.style.boxShadow = prev; }, 2600);
+    }, 400);
+    return () => clearTimeout(t);
+  }, [saltoKind]);
+
+  // Salto del Panorama a una CARPETA de material (logo, testimonios, VSL editado…).
+  // Las carpetas viven en la pestaña Recursos de este editor; antes el salto se
+  // resolvía afuera, en la pantalla del funnel, donde esos nodos no están montados:
+  // limpiaba la instrucción y no abría nada. Ahora se resuelve acá, que es donde están.
+  useEffect(() => {
+    const j = getCfgJump();
+    if (j?.destino !== 'recursos') return undefined;
+    clearCfgJump();   // la pestaña ya se eligió al montar (ver el useState de `view`)
+    const t = setTimeout(() => {
+      const el = document.querySelector(`[data-res="${j.campo}"]`);
+      if (!el) return;
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      const prev = el.style.boxShadow;
+      el.style.transition = 'box-shadow .25s';
+      el.style.boxShadow = '0 0 0 3px #FFD84D';
+      setTimeout(() => { el.style.boxShadow = prev; }, 2600);
+    }, 450);
+    return () => clearTimeout(t);
+  }, []);
 
   // Carga las personas asignables (cliente + Encargados de grabarse) del cliente.
   useEffect(() => {
@@ -1669,7 +1721,7 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, sibling
             const cat = kindCat?.[gr.kind];
             const showCatHead = cat && cat.first && (cat.multi || cat.label !== sc.label);
             return (
-              <div key={gr.kind} className="mb-0.5" style={emptyCat ? { opacity: 0.6 } : undefined}>
+              <div key={gr.kind} data-kindgroup={gr.kind} className="mb-0.5" style={emptyCat ? { opacity: 0.6 } : undefined}>
                 {showCatHead && (
                   <div className="flex items-center gap-1.5 px-2 pt-3 pb-0.5">
                     <span className="text-[10px] font-extrabold tracking-[0.11em] uppercase" style={{ color: cat.color }}>{cat.label}</span>

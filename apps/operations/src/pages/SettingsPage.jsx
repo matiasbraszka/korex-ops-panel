@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { LayoutGrid, Tag, Briefcase, Users, Sparkles, Mail, CheckSquare, Workflow, DollarSign, Contact, Gauge, Phone, Bell, Cpu, Columns3 } from 'lucide-react';
+import { LayoutGrid, Tag, Briefcase, Users, Sparkles, Mail, CheckSquare, Workflow, DollarSign, Contact, Gauge, Phone, Bell, Cpu, Columns3, ListChecks } from 'lucide-react';
 import TemplateEditor from '../components/settings/TemplateEditor';
 import ServicesEditor from '../components/settings/ServicesEditor';
 import PrioritiesEditor from '../components/settings/PrioritiesEditor';
@@ -7,6 +7,7 @@ import TeamUsersEditor from '../components/settings/TeamUsersEditor';
 import HistorialTiposEditor from '../components/settings/HistorialTiposEditor';
 import HistorialEmailEditor from '../components/settings/HistorialEmailEditor';
 import PendingResourcesTemplateEditor from '../components/settings/PendingResourcesTemplateEditor';
+import ChecklistTemplatesEditor from '../components/settings/ChecklistTemplatesEditor';
 import OnboardingConfigEditor from '../components/settings/OnboardingConfigEditor';
 import FinanzasDefaultsEditor from '../components/settings/FinanzasDefaultsEditor';
 import PersonalEditor from '../components/settings/PersonalEditor';
@@ -25,6 +26,7 @@ const TABS = [
   { id: 'template',      label: 'Plantilla de Roadmap',  Icon: LayoutGrid },
   { id: 'del-tabs',      label: 'Pestañas del DEL',      Icon: Columns3 },
   { id: 'pending-res',   label: 'Recursos pendientes',   Icon: CheckSquare },
+  { id: 'checklists',    label: 'Checklists de tareas',  Icon: ListChecks },
   { id: 'services',      label: 'Servicios',             Icon: Briefcase },
   { id: 'priorities',    label: 'Prioridades',           Icon: Tag },
   { id: 'hist-tipos',    label: 'Tipos de evento',       Icon: Sparkles },
@@ -73,6 +75,7 @@ export default function SettingsPage() {
         {tab === 'template'    && <TemplateEditor />}
         {tab === 'del-tabs'    && <DelTabsConfigEditor />}
         {tab === 'pending-res' && <PendingResourcesTemplateEditor />}
+        {tab === 'checklists'  && <ChecklistTemplatesEditor />}
         {tab === 'services'    && <ServicesEditor />}
         {tab === 'priorities'  && <PrioritiesEditor />}
         {tab === 'hist-tipos'  && <HistorialTiposEditor />}

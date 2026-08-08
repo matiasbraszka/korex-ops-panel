@@ -20,7 +20,7 @@ import FunnelConfigBlock from './funnels/FunnelConfigBlock';
 import FunnelEstrategiaBlock from './funnels/FunnelEstrategiaBlock';
 import FunnelResourceFolder from './funnels/FunnelResourceFolder';
 import DelEditor from './funnels/DelEditor';
-import { getCfgJump, clearCfgJump, getPanoramaReturn, clearPanoramaReturn } from './funnels/cfgJump';
+import { getCfgJump, getPanoramaReturn, clearPanoramaReturn } from './funnels/cfgJump';
 import { openUrl, copyText } from './recursosShared';
 import { normVoomly } from './voomlyMatch';
 
@@ -549,29 +549,17 @@ function FunnelRow({ f, stages, delText = '', delDocUrl = '', delDocId = '', cli
   const [voomlyOpen, setVoomlyOpen] = useState(false);
   const [editorMsg, setEditorMsg] = useState(null); // texto del mensaje para el editor (o null)
   const [delOpen, setDelOpen] = useState(false);    // lector del DEL a pantalla completa
-  // Salto directo del Panorama: si la instrucción apunta a ESTE funnel, abrir el
-  // DEL de una (DelEditor va a arrancar en la pestaña Configuración).
-  // Con destino 'recursos' NO se abre el DEL: lo que se busca (logo, branding, el
-  // VSL editado) está en las carpetas de esta misma pantalla, así que solo hay que
-  // hacer scroll hasta la carpeta y destacarla.
+  // Salto directo del Panorama: si la instrucción apunta a ESTE funnel, se abre el DEL.
+  //
+  // Los tres destinos ('del', 'config' y 'recursos') viven adentro del editor: en la
+  // PANTALLA del funnel los bloques de configuración y de carpetas no se montan acá
+  // (ver más abajo: `{!forcePage && (...)}`), se le pasan al DelEditor como nodos.
+  // Antes, con destino 'recursos', esto buscaba un [data-res] que no existía todavía:
+  // borraba la instrucción, no abría nada, y el usuario quedaba parado en la ficha.
   useEffect(() => {
     const j = getCfgJump();
     if (!forcePage || !j || j.funnel !== f.id) return;
-    if (j.destino === 'recursos') {
-      clearCfgJump();
-      const t = setTimeout(() => {
-        const el = document.querySelector(`[data-res="${j.campo}"]`);
-        if (!el) return;
-        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        const prev = el.style.boxShadow;
-        el.style.transition = 'box-shadow .25s';
-        el.style.boxShadow = '0 0 0 3px #FFD84D';
-        setTimeout(() => { el.style.boxShadow = prev; }, 2600);
-      }, 350);
-      return () => clearTimeout(t);
-    }
     setDelOpen(true);
-    return undefined;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [forcePage, f.id]);
   const [clientResTick, setClientResTick] = useState(0); // sube al mover un recurso → recarga todas las carpetas
