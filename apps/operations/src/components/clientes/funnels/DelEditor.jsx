@@ -304,6 +304,13 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, sibling
   const [importBusy, setImportBusy] = useState(false);
   const [importRes, setImportRes] = useState(null);
   const [activeVersion, setActiveVersion] = useState(null); // versión del funnel que se está viendo (null = la última)
+  // Ficha de cada versión: { [n]: { titulo, nota, pasos } }. El título y la nota son
+  // para distinguirlas de un vistazo; `pasos` es qué categorías lleva el embudo en esa
+  // versión (una V2 "solo formulario" no arrastra Pre-landing ni Landing vacías).
+  const [verMeta, setVerMeta] = useState({});
+  const [aprobacion, setAprobacion] = useState({});   // { [sectionId]: {estado, actorTipo, actorNombre, at} }
+  const [pasoModal, setPasoModal] = useState(null);   // { v } → elegir qué paso agregar
+  const [editVer, setEditVer] = useState(null);       // { v, titulo, nota } → editar la ficha
   const [verModal, setVerModal] = useState(null); // modal "nueva versión": { scope:'paginas'|'completa', avatars:Set }
   const [delVerModal, setDelVerModal] = useState(null); // modal "borrar versión": { v, texto }
   // Qué se ve en el panel derecho: 'estrategia' | 'del' (el documento) | 'config' | 'recursos' | 'cliente:<docId>'
@@ -593,6 +600,32 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, sibling
   };
 
   useEffect(() => { cargar(); }, [cargar]);
+
+  // Ficha de las versiones (título, nota, pasos). Va aparte de las secciones porque
+  // una versión puede existir sin secciones propias: la V1 de un DEL importado de
+  // Drive, por ejemplo, o una recién creada a la que todavía no se le escribió nada.
+  const cargarVersiones = useCallback(() => {
+    if (!docId) return Promise.resolve();   // el editor se remonta por funnel
+    return sbFetch(`del_versions?select=version,titulo,nota,pasos&doc_id=eq.${encodeURIComponent(docId)}&order=version.asc`)
+      .then((rows) => {
+        const m = {};
+        for (const r of (Array.isArray(rows) ? rows : [])) m[r.version] = r;
+        setVerMeta(m);
+      })
+      .catch(() => setVerMeta({}));
+  }, [docId]);
+  useEffect(() => { cargarVersiones(); }, [cargarVersiones]);
+
+  // Quién movió cada sección a su estado actual. Es lo que permite distinguir un guión
+  // que APROBÓ EL CLIENTE de uno que el equipo mandó a grabar a mano: los dos terminan
+  // en grab_flujo = 'grabacion' y se veían idénticos. Una consulta por DEL.
+  const cargarAprobacion = useCallback(() => {
+    if (!docId) return Promise.resolve();
+    return supabase.rpc('del_grab_aprobacion', { p_doc_id: docId })
+      .then(({ data }) => setAprobacion(data && typeof data === 'object' ? data : {}))
+      .catch(() => setAprobacion({}));
+  }, [docId]);
+  useEffect(() => { cargarAprobacion(); }, [cargarAprobacion]);
 
   // Documentos del cliente (aparecen en todos sus DEL), para el grupo "DEL CLIENTE".
   // Se pueden quitar/agregar: el que se quita se guarda como "excluido" (client_brain_pins
@@ -1232,8 +1265,9 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, sibling
   const versions = useMemo(() => {
     const set = new Set([1]);
     for (const s of (secs || [])) if (VERSIONABLE_KINDS.includes(s.kind)) set.add(s.version || 1);
+    for (const v of Object.keys(verMeta)) set.add(Number(v));
     return [...set].sort((a, b) => a - b);
-  }, [secs]);
+  }, [secs, verMeta]);
   // Versión que se está viendo: la elegida, o la última disponible por defecto.
   const verActiva = (activeVersion && versions.includes(activeVersion)) ? activeVersion : versions[versions.length - 1];
   // Si la versión elegida deja de existir (se borró), volvés a la última.
@@ -1261,12 +1295,32 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, sibling
       }
       (byKind[s.kind] || (byKind[s.kind] = [])).push(s);
     }
-    // 'estrategia' SIEMPRE presente: es el encabezado del DEL (bloque del funnel
-    // arriba + la estrategia real escrita abajo), aunque todavía esté vacía.
-    const kinds = Array.from(new Set(['estrategia', ...STANDARD_KINDS, ...sorted.map(s => s.kind)]));
+    // Qué categorías se dibujan.
+    //
+    // Antes eran siempre las 8 estándar, aunque estuvieran vacías. Eso hacía imposible
+    // decir "este embudo no lleva Pre-landing": la borrabas y volvía vacía al toque.
+    // Ahora los PASOS son de la versión (del_versions.pasos): la V1 puede llevar las
+    // cuatro páginas y la V2 ir directo al formulario.
+    //
+    // Si la versión no tiene pasos guardados (todo lo anterior a este cambio), se cae
+    // a las 8 estándar de siempre: nada se esconde de un DEL que ya existía.
+    //
+    // Y pase lo que pase, una categoría que TIENE secciones se muestra: los pasos
+    // deciden qué se ofrece vacío, nunca esconden contenido escrito.
+    const pasos = verMeta[verActiva]?.pasos;
+    const base = (Array.isArray(pasos) && pasos.length > 0)
+      ? pasos
+      : (Array.isArray(pasos) ? [] : STANDARD_KINDS);   // [] = se sacaron todos a propósito
+    const kinds = Array.from(new Set(['estrategia', ...base, ...sorted.map(s => s.kind)]));
     kinds.sort((a, b) => kindRank(a) - kindRank(b));
     return kinds.map(k => ({ kind: k, items: byKind[k] || [] }));
-  }, [sorted, verActiva, kindVersionsMap]);
+  }, [sorted, verActiva, kindVersionsMap, verMeta]);
+
+  // Pasos que la versión activa NO lleva y se podrían volver a agregar.
+  const pasosDisponibles = useMemo(() => {
+    const puestos = new Set(groups.map(g => g.kind));
+    return STANDARD_KINDS.filter(k => !puestos.has(k));
+  }, [groups, STANDARD_KINDS]);
 
   const irA = (id) => {
     setActiva(id);
@@ -1341,6 +1395,9 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, sibling
     if (error) { window.alert('No pude borrar: ' + error.message); return; }
     setSecs((prev) => prev.filter(x => x.id !== s.id));
     emitir('section-del', { id: s.id });
+    // Si era la última de su categoría, la base ya sacó ese paso de la versión:
+    // hay que releer la ficha para que el menú deje de dibujarlo vacío.
+    await cargarVersiones();
   };
 
   const renombrar = async (id, title) => {
@@ -1373,18 +1430,11 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, sibling
     });
     if (error) { window.alert('No pude guardarlo: ' + error.message); await cargar(); return; }
     emitir('section', { row: { id: s.id, accion_cliente: accion, estado_seccion: estado, para_grabar: paraGrabar } });
+    cargarAprobacion();   // cambió de estado: el sello de "quién lo movió" queda viejo
   };
 
-  const toggleParaGrabar = async (s) => {
-    const next = !s.para_grabar;
-    setSecs((prev) => prev.map(x => x.id === s.id ? { ...x, para_grabar: next } : x));
-    const { error } = await supabase.rpc('del_section_set_meta', {
-      p_id: s.id, p_para_grabar: next,
-      p_orden: s.orden_grabacion ?? s.ord ?? null, p_by: by,
-    });
-    if (error) { window.alert('No pude marcarla: ' + error.message); await cargar(); return; }
-    emitir('section', { row: { id: s.id, para_grabar: next } });
-  };
+  // (Acá vivía `toggleParaGrabar`: código muerto, sin ningún lugar que lo llamara.
+  //  "Para grabar" se deriva de acción + estado, y ahora esa regla vive en la base.)
 
   // Mover una sección a otra categoría (cambia su `kind` → aparece en otro grupo).
   const moverACategoria = async (id, kind) => {
@@ -1446,21 +1496,68 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, sibling
   const nombresAvatar = useMemo(() => (secs || []).filter(s => s.kind === 'avatares').map(s => s.title), [secs]);
   const agregarVersion = () => {
     if (!resolvedDoc) { window.alert('Este funnel todavía no tiene un DEL propio donde crear versiones.'); return; }
-    setVerModal({ scope: 'paginas', avatars: new Set() });
+    setVerModal({ scope: 'paginas', avatars: new Set(), titulo: '', nota: '' });
   };
   const confirmarVersion = async () => {
     const scope = verModal?.scope || 'paginas';
     const chosen = [...(verModal?.avatars || [])];
+    const titulo = (verModal?.titulo || '').trim();
+    const nota = (verModal?.nota || '').trim();
     setVerModal(null);
-    const { data, error } = await supabase.rpc('del_version_add', { p_doc_id: resolvedDoc, p_by: by, p_scope: scope });
+    const { data, error } = await supabase.rpc('del_version_add', {
+      p_doc_id: resolvedDoc, p_by: by, p_scope: scope, p_titulo: titulo || null, p_nota: nota || null,
+    });
     if (error) { window.alert('No pude agregar la versión: ' + error.message); return; }
     await cargar();
+    await cargarVersiones();
     emitir('section-add', {});
     if (data) {
       setActiveVersion(data); setModo('editar'); setView('del');
       // Relanzamiento completo → los avatares elegidos suman la versión (carpetas grabación/edición V2).
       if (scope === 'completa') onVersionComplete?.(data, chosen.length ? chosen : nombresAvatar);
     }
+  };
+
+  // ── Pasos del embudo, por versión ────────────────────────────────────────────
+  // Qué categorías lleva ESTA versión. Agregar un paso lo devuelve al menú; sacarlo
+  // solo lo esconde (la base se niega si esa categoría tiene algo escrito).
+  const agregarPaso = async (kind) => {
+    setPasoModal(null);
+    if (!resolvedDoc || !kind) return;
+    const actuales = groups.map(g => g.kind).filter(k => STANDARD_KINDS.includes(k));
+    const { error } = await supabase.rpc('del_version_set_pasos', {
+      p_doc_id: resolvedDoc, p_version: verActiva, p_pasos: [...new Set([...actuales, kind])],
+    });
+    if (error) { window.alert('No pude agregar el paso: ' + error.message); return; }
+    await cargarVersiones();
+  };
+  const quitarPaso = async (kind) => {
+    if (!resolvedDoc || !kind) return;
+    const sc = secOf(kind);
+    if (!window.confirm(
+      `¿Este embudo deja de llevar "${sc.label}" en la V${verActiva}?\n\n`
+      + `Se saca del documento y de lo que ve el cliente. No se borra nada de lo demás, `
+      + `y lo podés volver a agregar cuando quieras.`)) return;
+    const actuales = groups.map(g => g.kind).filter(k => STANDARD_KINDS.includes(k) && k !== kind);
+    const { error } = await supabase.rpc('del_version_set_pasos', {
+      p_doc_id: resolvedDoc, p_version: verActiva, p_pasos: actuales,
+    });
+    if (error) { window.alert(error.message); return; }
+    await cargarVersiones();
+  };
+
+  // Título y nota de una versión ya creada.
+  const guardarFichaVersion = async () => {
+    const v = editVer?.v;
+    const titulo = (editVer?.titulo || '').trim();
+    const nota = (editVer?.nota || '').trim();
+    setEditVer(null);
+    if (!v || !resolvedDoc) return;
+    const { error } = await supabase.rpc('del_version_set_meta', {
+      p_doc_id: resolvedDoc, p_version: v, p_titulo: titulo || null, p_nota: nota || null,
+    });
+    if (error) { window.alert('No pude guardar: ' + error.message); return; }
+    await cargarVersiones();
   };
 
   // Borrar una versión ENTERA: sus secciones del DEL + las grabaciones (videos crudos).
@@ -1679,16 +1776,28 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, sibling
             <div className="flex items-center gap-1 flex-wrap mt-1.5">
               {versions.map(v => {
                 const on = verActiva === v;
+                const meta = verMeta[v] || {};
+                // El título es un agregado, nunca un reemplazo: el chip sigue diciendo
+                // V1/V2/V3 y el nombre va al lado. La nota ("en qué cambia") aparece al
+                // pasar el mouse, que es donde se necesita: comparando una con otra.
+                const tip = [`Ver la versión ${v}`, meta.titulo, meta.nota].filter(Boolean).join(' · ');
                 return (
-                  <button key={v} onClick={() => setActiveVersion(v)} title={`Ver la versión ${v} de este funnel`}
-                    className="inline-flex items-center py-1 px-2.5 rounded-md text-[11px] font-bold border cursor-pointer transition-colors"
+                  <button key={v} onClick={() => setActiveVersion(v)} title={tip}
+                    className="inline-flex items-center gap-1.5 py-1 px-2.5 rounded-md text-[11px] font-bold border cursor-pointer transition-colors max-w-[190px]"
                     style={on
                       ? { background: '#EFEBFF', color: '#6D28D9', borderColor: '#DDD3FF' }
                       : { background: 'transparent', color: '#9098A4', borderColor: '#E7EAF0' }}>
-                    V{v}
+                    <span className="shrink-0">V{v}</span>
+                    {meta.titulo && <span className="font-semibold truncate opacity-90">· {meta.titulo}</span>}
+                    {meta.nota && <span title={meta.nota} className="shrink-0 opacity-60">ⓘ</span>}
                   </button>
                 );
               })}
+              <button onClick={() => setEditVer({ v: verActiva, titulo: verMeta[verActiva]?.titulo || '', nota: verMeta[verActiva]?.nota || '' })}
+                title={`Ponerle nombre a la V${verActiva} y anotar en qué cambia`}
+                className="inline-flex items-center justify-center w-7 h-7 rounded-md border border-[#E7EAF0] text-[#9098A4] hover:text-[#6D28D9] hover:border-[#DDD3FF] bg-transparent cursor-pointer">
+                <Pencil size={12} />
+              </button>
               <button onClick={agregarVersion} title="Agregar una versión nueva del funnel (V2, V3…) con VSL, anuncios y landings propios"
                 className="inline-flex items-center justify-center w-7 h-7 rounded-md border border-dashed border-[#D0D5DD] text-[#9098A4] hover:border-[#7C3AED] hover:text-[#7C3AED] bg-transparent cursor-pointer">
                 <Plus size={13} />
@@ -1727,10 +1836,19 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, sibling
                     <span className="text-[10px] font-extrabold tracking-[0.11em] uppercase" style={{ color: cat.color }}>{cat.label}</span>
                   </div>
                 )}
-                <div className="flex items-center gap-1.5 px-2 pt-2 pb-1">
+                <div className="group/cab flex items-center gap-1.5 px-2 pt-2 pb-1">
                   <span className="w-[7px] h-[7px] rounded-full shrink-0" style={{ background: sc.c }} />
                   <span className="text-[9.5px] font-extrabold tracking-[0.07em] uppercase" style={{ color: sc.c }}>{sc.label}</span>
                   <span className="text-[9.5px] font-bold text-[#C3C9D4]">{gr.items.length}</span>
+                  {/* Sacar el paso: solo si la categoría está vacía en esta versión. Con
+                      contenido escrito hay que borrar las secciones primero — la base
+                      también se niega, pero acá ni siquiera se ofrece. */}
+                  {emptyCat && STANDARD_KINDS.includes(gr.kind) && (
+                    <button onClick={() => quitarPaso(gr.kind)} title={`Este embudo no lleva ${sc.label}`}
+                      className="opacity-0 group-hover/cab:opacity-100 ml-auto w-4 h-4 inline-flex items-center justify-center rounded text-[#C3C9D4] hover:text-[#DC2626] border-none bg-transparent cursor-pointer transition-opacity">
+                      <X size={10} />
+                    </button>
+                  )}
                 </div>
                 {gr.items.map(s => {
                   const on = view === 'del' && activa === s.id;
@@ -1751,6 +1869,14 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, sibling
               </div>
             );
           })}
+          {/* Devolver un paso que este embudo no lleva. Aparece solo si falta alguno:
+              con las 8 categorías puestas no hay nada que agregar. */}
+          {resolvedDoc && pasosDisponibles.length > 0 && (
+            <button onClick={() => setPasoModal({ v: verActiva })}
+              className="flex items-center gap-2 py-2 px-2.5 mt-1 rounded-[9px] border border-dashed border-[#D0D5DD] text-[11.5px] font-semibold text-[#9098A4] cursor-pointer hover:border-[#0891B2] hover:text-[#0891B2] bg-transparent w-full">
+              <Plus size={13} />Agregar paso al embudo
+            </button>
+          )}
           {editando && view === 'del' && resolvedDoc && (
             <button onClick={() => agregar(null)} className="flex items-center gap-2 py-2 px-2.5 mt-1 rounded-[9px] border border-dashed border-[#D0D5DD] text-[11.5px] font-semibold text-[#9098A4] cursor-pointer hover:border-[#7C3AED] hover:text-[#7C3AED] bg-transparent">
               <Plus size={13} />Agregar sección
@@ -2136,6 +2262,27 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, sibling
                           <span className="hidden lg:inline shrink-0 text-[10px] font-bold py-1 px-1.5 rounded-md whitespace-nowrap" style={{ background: m.b, color: m.c }}
                             title={dias != null ? `Hace ${dias} día(s) en este estado` : ''}>
                             {m.t}{dias != null ? ` · ${dias}d` : ''}
+                          </span>
+                        );
+                      })()}
+                      {/* ¿Cómo llegó este guión a grabación? Aprobado por el cliente, o
+                          puesto a mano por el equipo. Los dos terminan en el mismo estado
+                          y hasta ahora se veían idénticos: no había forma de saber cuál
+                          había pasado por el cliente. */}
+                      {s.grab_flujo === 'grabacion' && (() => {
+                        const a = aprobacion[s.id];
+                        if (!a || a.estado !== 'grabacion') return null;
+                        const delCliente = a.actorTipo === 'cliente' || a.actorTipo === 'colaborador';
+                        const cuando = a.at ? new Date(a.at).toLocaleDateString('es-AR', { day: 'numeric', month: 'short' }) : '';
+                        return delCliente ? (
+                          <span className="hidden lg:inline shrink-0 text-[10px] font-bold py-1 px-1.5 rounded-md whitespace-nowrap" style={{ background: '#DCFCE7', color: '#15803D' }}
+                            title={`Lo aprobó ${a.actorNombre || 'el cliente'} desde su plataforma${cuando ? ' el ' + cuando : ''}. Pasó solo a grabación.`}>
+                            ✅ Aprobado por {String(a.actorNombre || 'el cliente').split(' ')[0]}
+                          </span>
+                        ) : (
+                          <span className="hidden lg:inline shrink-0 text-[10px] font-bold py-1 px-1.5 rounded-md whitespace-nowrap" style={{ background: '#FEF6E7', color: '#B45309' }}
+                            title="Lo mandó a grabar el equipo: el cliente nunca lo aprobó. Para que pase por él, poné la acción en «Revisar».">
+                            ⚡ Sin aprobar
                           </span>
                         );
                       })()}
@@ -2559,9 +2706,68 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, sibling
                 </div>
               </div>
             )}
+            {/* Título y nota: es lo que después permite distinguir la V2 de la V3 sin
+                abrir las dos. La estructura V1/V2/V3 se mantiene; el nombre va al lado. */}
+            <div className="mt-3 pt-3 border-t border-[#EEF0F3]">
+              <label className="block text-[12px] font-semibold text-[#6B7280] mb-1">Nombre de la versión <span className="font-normal text-[#AEB4BF]">(opcional)</span></label>
+              <input value={verModal.titulo || ''} onChange={e => setVerModal(v => ({ ...v, titulo: e.target.value }))}
+                placeholder="Ej: Solo formulario, Ángulo dolor, Test A/B febrero"
+                className="w-full py-2 px-3 border border-[#E2E5EB] rounded-lg text-[13px] text-[#1A1D26] outline-none focus:border-[#7C3AED]" />
+              <label className="block text-[12px] font-semibold text-[#6B7280] mt-2.5 mb-1">¿En qué cambia respecto de las otras? <span className="font-normal text-[#AEB4BF]">(opcional)</span></label>
+              <textarea value={verModal.nota || ''} onChange={e => setVerModal(v => ({ ...v, nota: e.target.value }))}
+                rows={2} placeholder="Se lee al pasar el mouse por el chip de la versión."
+                className="w-full py-2 px-3 border border-[#E2E5EB] rounded-lg text-[12.5px] text-[#1A1D26] outline-none focus:border-[#7C3AED] resize-y leading-snug" />
+            </div>
             <div className="flex justify-end gap-2 mt-4">
               <button onClick={() => setVerModal(null)} className="py-2 px-4 rounded-lg border border-[#E2E5EB] bg-white text-[#4B5563] text-[13px] font-semibold cursor-pointer">Cancelar</button>
               <button onClick={confirmarVersion} className="py-2 px-4 rounded-lg border-none bg-[#7C3AED] text-white text-[13px] font-semibold cursor-pointer hover:brightness-95">Crear versión</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Diálogo: ponerle nombre y nota a una versión que ya existe. */}
+      {editVer && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center p-4" style={{ background: 'rgba(15,23,42,.45)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) setEditVer(null); }}>
+          <div className="bg-white rounded-2xl w-full max-w-[420px] p-5" style={{ boxShadow: '0 20px 60px rgba(10,22,40,.28)' }}>
+            <div className="text-[15px] font-bold text-[#1A1D26] mb-1">Versión {editVer.v}</div>
+            <div className="text-[11.5px] text-[#9098A4] mb-3">Para distinguirla de las otras sin tener que abrirlas.</div>
+            <label className="block text-[12px] font-semibold text-[#6B7280] mb-1">Nombre</label>
+            <input autoFocus value={editVer.titulo} onChange={e => setEditVer(s => ({ ...s, titulo: e.target.value }))}
+              placeholder="Ej: Solo formulario, Ángulo dolor"
+              className="w-full py-2 px-3 border border-[#E2E5EB] rounded-lg text-[13px] text-[#1A1D26] outline-none focus:border-[#7C3AED]" />
+            <label className="block text-[12px] font-semibold text-[#6B7280] mt-2.5 mb-1">¿En qué cambia respecto de las otras?</label>
+            <textarea value={editVer.nota} onChange={e => setEditVer(s => ({ ...s, nota: e.target.value }))}
+              rows={3} placeholder="Se lee al pasar el mouse por el chip de la versión."
+              className="w-full py-2 px-3 border border-[#E2E5EB] rounded-lg text-[12.5px] text-[#1A1D26] outline-none focus:border-[#7C3AED] resize-y leading-snug" />
+            <div className="flex justify-end gap-2 mt-4">
+              <button onClick={() => setEditVer(null)} className="py-2 px-4 rounded-lg border border-[#E2E5EB] bg-white text-[#4B5563] text-[13px] font-semibold cursor-pointer">Cancelar</button>
+              <button onClick={guardarFichaVersion} className="py-2 px-4 rounded-lg border-none bg-[#7C3AED] text-white text-[13px] font-semibold cursor-pointer hover:brightness-95">Guardar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Diálogo: devolver un paso que este embudo no lleva. */}
+      {pasoModal && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center p-4" style={{ background: 'rgba(15,23,42,.45)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) setPasoModal(null); }}>
+          <div className="bg-white rounded-2xl w-full max-w-[400px] p-5" style={{ boxShadow: '0 20px 60px rgba(10,22,40,.28)' }}>
+            <div className="text-[15px] font-bold text-[#1A1D26] mb-1">Agregar un paso a la V{pasoModal.v}</div>
+            <div className="text-[11.5px] text-[#9098A4] mb-3">Vuelve a aparecer en el documento y en lo que ve el cliente.</div>
+            <div className="flex flex-col gap-1.5">
+              {pasosDisponibles.map(k => {
+                const sc = secOf(k);
+                return (
+                  <button key={k} onClick={() => agregarPaso(k)}
+                    className="flex items-center gap-2.5 py-2.5 px-3 rounded-lg border border-[#E2E5EB] bg-white cursor-pointer text-left hover:border-[#0891B2]">
+                    <span className="w-[9px] h-[9px] rounded-full shrink-0" style={{ background: sc.c }} />
+                    <span className="text-[13px] font-semibold text-[#1A1D26]">{sc.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+            <div className="flex justify-end mt-4">
+              <button onClick={() => setPasoModal(null)} className="py-2 px-4 rounded-lg border border-[#E2E5EB] bg-white text-[#4B5563] text-[13px] font-semibold cursor-pointer">Cancelar</button>
             </div>
           </div>
         </div>

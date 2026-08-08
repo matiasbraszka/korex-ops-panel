@@ -647,9 +647,12 @@ export default function DocumentoScreen() {
                     {/* COPY DEL FUNNEL: cada página con su cabecera numerada del embudo. */}
                     {esCopy && (
                       <div style={{ display: 'flex', alignItems: 'center', gap: 11, flexWrap: 'wrap', margin: '2px 0 14px', padding: '12px 14px', background: 'var(--mk-purple-bg, #F5F3FF)', border: '1px solid var(--mk-purple-border, #E5DEFB)', borderRadius: 14 }}>
-                        <span style={{ width: 30, height: 30, flex: 'none', borderRadius: 10, background: 'var(--mk-purple)', color: '#fff', fontSize: 14, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{s.paginaNum || i + 1}</span>
+                        {/* Se numera por POSICIÓN, no por el número fijo que trae cada tipo
+                            de página. Un embudo puede no llevar las cuatro: si va directo al
+                            formulario, tiene que decir "Página 1 de 1" y no "Página 3 de 4". */}
+                        <span style={{ width: 30, height: 30, flex: 'none', borderRadius: 10, background: 'var(--mk-purple)', color: '#fff', fontSize: 14, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{i + 1}</span>
                         <div style={{ minWidth: 0, flex: 1 }}>
-                          <div style={{ fontSize: 9.5, fontWeight: 800, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--mk-purple)' }}>Página {s.paginaNum || i + 1} de 4</div>
+                          <div style={{ fontSize: 9.5, fontWeight: 800, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--mk-purple)' }}>Página {i + 1} de {secciones.length}</div>
                           <div style={{ fontFamily: "'Montserrat', sans-serif", fontSize: 18, fontWeight: 800, letterSpacing: '-0.02em', color: T.ink, lineHeight: 1.15 }}>{s.pagina || s.titulo}</div>
                         </div>
                         <span style={{ display: 'inline-flex', alignItems: 'center', fontSize: 10, fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase', padding: '5px 10px', borderRadius: 999, background: estaRevisada(s) ? 'var(--mk-green-bg)' : '#fff', color: estaRevisada(s) ? 'var(--mk-green)' : 'var(--mk-purple)', border: estaRevisada(s) ? 'none' : '1px solid var(--mk-purple-border, #E5DEFB)' }}>
