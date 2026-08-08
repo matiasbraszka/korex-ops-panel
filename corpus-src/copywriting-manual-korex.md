@@ -9,6 +9,8 @@
 - "Un mal marketing puede vender una buena oferta; un gran marketing no puede vender una mala oferta." Si la oferta es irresistible, no hace falta un sistema complejo.
 - **Todo copy sale del avatar.** Entrá en su cabeza: su identidad ideal, sus dolores, sus creencias ("soy el único que puede vender mi oferta"), el **insight** (la razón real que lo mantiene atascado), sus deseos, lo que ya intentó, lo que no quiere sacrificar, sus enemigos, sus celos, de quién quiere reconocimiento, sus objeciones. Escribí SINTIENDO y PENSANDO como él, con SUS palabras, no las tuyas.
 - **Las 4 ventas que hace cada pieza, en orden:** (1) Atención — frenar el scroll (título/gancho). (2) Lectura — que siga leyendo. (3) Producto — vender el vehículo con beneficios creíbles y crear deseo. (4) Acción — que dé el paso (clic/registro). Cada segundo/línea vende al siguiente.
+- **La micro-estructura de un anuncio (el eje del copy):** **CREENCIA → INSIGHT → VEHÍCULO → DESEO + CTA.** Partí de una creencia que el avatar YA tiene → rompela con el **insight** (la razón real, contraintuitiva, que él no ve) → presentá el **vehículo** (tu mecanismo único) → cerrá con el **deseo + CTA calificado**. Ej: "Sí, los anuncios de Facebook ya no funcionan *(creencia)*. Pero no funcionan si vendés barato: los costos subieron y es imposible con productos de menos de US$1.000 *(insight)*. Por eso hay que vender high ticket, así el costo del anuncio te da igual *(vehículo)*. Si querés facturar de forma rentable y recurrente, tocá el botón *(deseo + CTA)*."
+- **Domino statement:** definí en UNA frase **lo que deben creer** para que todo lo demás caiga solo. Es la bisagra de la persuasión: si compra esa idea, compra la oferta.
 
 ## 2. NIVELES DE CONSCIENCIA (Eugene Schwartz) — dónde arranca el título
 Según qué tan consciente es el prospecto, el título empieza distinto:
@@ -40,6 +42,13 @@ El vehículo/mecanismo único suele ir en el título. No se vende el producto sa
 - **¿Eres tú…? / Preguntas afirmativas:** que responda "sí, ese soy yo" (estilo quiz). "¿Estás cometiendo estos errores de [tema]?"
 - **Caso de estudio:** "Cómo [nombre] logró [cifra específica] en [tiempo]." (cifra del líder/cliente, nunca promesa al lector).
 - **La única/mejor forma · Cómo BENEFICIO sin DOLOR:** "Cómo [beneficio] sin [objeción]… (funciona incluso si [contra-objeción])."
+- **El Además (más valor del esperado):** "Además te llevás [bonus/lista/recurso inesperado]…"
+- **Admitir un error / cuestionar sus errores:** "2021 fue el peor año de mi vida — y fue mi culpa." · "¿Todavía [hábito equivocado]? Por qué te quema el dinero y en qué enfocarte en cambio."
+- **Tendencia / Futuro:** "Esta va a ser LA forma de [resultado] en 2026." (o atalo a un evento actual).
+
+**Tipos de apertura (lead) — cómo arranca el cuerpo:** **Directo** ("Esto es lo que tengo para vos") · **Promesa** ("Cómo [resultado]") · **Problema-Solución** (describí el problema → el costo de no resolverlo → tu solución única) · **Gran Secreto** (revelá info nueva) · **Proclamación audaz** ("Dame un día y si no [resultado], te pago yo") · **Story** (presentación → tensión/conflicto → resolución/clímax emocional).
+
+**Checklist del título (repasá antes de cerrar):** especificidad · vehículo/novedad/diferencial · problema-dolor grande y urgente (¿por qué AHORA?) · deseo/beneficio profundo · prueba/credibilidad · supera objeciones/creencias · curiosidad · fácil/rápido · calibrado a la sofisticación del mercado y al nivel de consciencia.
 
 ## 4. ÁNGULOS
 Un ángulo es otra forma de abordar/explicar la MISMA oferta. Sirven para títulos y bullets. Importan porque: testeás qué responde mejor la audiencia, evitás la saturación creativa y extendés la vida de la oferta. **Un anuncio = un ángulo.** Menú: Nosotros vs Ellos · Antes/Después · Artículo de prensa · Emocional · Manejo de objeción · Humor · Lujo/Lifestyle · Storytelling · Confrontación · Meme.
@@ -47,6 +56,11 @@ Un ángulo es otra forma de abordar/explicar la MISMA oferta. Sirven para títul
 ## 5. CUERPO: beneficios, loops y amplificadores
 - **3 razones por las que NO compran:** (1) no quieren lo que ofrecés, (2) no creen que funcione para ELLOS, (3) no confían en vos. El copy resuelve las tres.
 - **Beneficios en 3 capas:** Funcional (qué hace) → Dimensional (imagen vívida de experimentarlo) → Emocional (cómo se sentirá). Y siempre "el beneficio del beneficio": ¿y eso qué le da? Ej. "bajar de peso → te ves más atractivo → tu pareja te lo dice" (estatus).
+- **La escalera del beneficio (para exprimir cada característica):** característica → beneficio de 1er nivel → el beneficio de ESE beneficio → ¿cuál es el COSTO de no tenerlo? → ¿cuál es el costo de ESE costo? Ejercicio de los **200 beneficios**: listá 200 (primarios y secundarios, personales y profesionales, lo que sufre si no compra, por qué vale 10x lo que cobrás) para dimensionar el valor de la oferta.
+- **Explicá QUÉ hace, no CÓMO.** Diferenciá el vehículo por su resultado y su novedad, no por el manual técnico. Describir el mecanismo NO es un beneficio: ese es el "beneficio falso" que hay que evitar.
+- **El enemigo común:** nombrá al villano (el método viejo, el gurú de turno, el sistema que los exprime) y ponete del lado del avatar contra él. Une, moviliza y da identidad.
+- **El insight (revelar el problema real):** la razón contraintuitiva por la que sigue atascado y que él no ve. Es el corazón del ángulo (creencia → insight → vehículo): sin insight, el copy suena a "otro más".
+- **Otros gatillos:** razón para actuar ahora (urgencia/escasez honesta) · validación personal · resultados ridículos y específicos · semejanza (que se vea reflejado en quien habla) · declaraciones si-entonces ("si [cumple condición], entonces esto es para vos") · etiquetas (poné al lector en un grupo: "coaches y agencias").
 - **Open loops (bucles abiertos):** abrí una pregunta en su mente que solo se responde si sigue leyendo. "Este detalle es la clave para X. Te lo explico en un momento, pero antes…"
 - **Amplificadores:** sospecha ("CONFIRMADO: …"), intriga, promesa poderosa, "incluso si…", especificidad/tiempo ("10.415 USD en 9 días"), estadística ("9 de 10…"), comparación ("por el precio de un café al día"), asociación, prueba, autoridad. Reemplazá "pero" por "y". "Esto" genera curiosidad. Usá comillas.
 - **Estatus:** el humano se mueve por estatus, que viene de cómo lo tratan los demás. Mostrá el beneficio desde el ángulo de lo que su pareja/jefe/colegas le dirían.
@@ -77,7 +91,7 @@ Las 4 emociones que todo mensaje ganador dispara. Cada una tiene su "alter ego" 
 - **GRANDE / Emocionante** (alter ego: **Rápido**): el tamaño de la oportunidad debe ser enorme y emocionante. Combina bien con FOMO. Nunca aburras: un tono seco mata al mejor contenido.
 
 ## 11. PRUEBA Y CREDIBILIDAD
-"Show, don't tell." **3 niveles de creencia:** me dicen que funciona → veo que funciona para otros (testimonios) → veo que funciona para mí (mini-victorias). Formas de establecer credibilidad: asociación con autoridad, demostrar resultados, superación de la adversidad (historia del héroe), credenciales, casos de estudio, dar resultados por adelantado, medios prestigiosos, especificidad, explicar el mecanismo único, admitir un error (pequeño para vos, grande a la vista del otro). Tipos de prueba: lógica, visual, demostrable, empírica, antes/después, estadísticas.
+Tenés que probar 3 cosas: que funciona para ÉL (**interno**), que funciona en SU entorno/mercado (**externo**) y que funciona TU método (**vehículo**). "Show, don't tell." **3 niveles de creencia:** me dicen que funciona → veo que funciona para otros (testimonios) → veo que funciona para mí (mini-victorias). Formas de establecer credibilidad: asociación con autoridad, demostrar resultados, superación de la adversidad (historia del héroe), credenciales, casos de estudio, dar resultados por adelantado, medios prestigiosos, especificidad, explicar el mecanismo único, admitir un error (pequeño para vos, grande a la vista del otro). Tipos de prueba: lógica, visual, demostrable, empírica, antes/después, estadísticas.
 
 ## 12. GARANTÍA
 Aumenta la certeza de resultado → aumenta ventas (solo 5-10% la reclama, pero sube ventas 20-50%). Garantizá el resultado **siguiendo tu método**, no el resultado a secas. Que sea audaz, específica, con nombre atractivo, visible, fácil de reclamar, con plazo. Tipos: incondicional, condicional (cumplir acciones), doble devolución, basada en rendimiento, mantener bonos, cobro retardado, extensión ("trabajamos gratis hasta lograrlo"), a resultados. Recordá los **tipos de riesgo** que teme (no solo el financiero): humillación, tiempo, molestia, resultados insatisfactorios, frustración.
@@ -93,6 +107,9 @@ Combinables; elegí según avatar y consciencia:
 - **AIDA:** Atención → Interés → Deseo → Acción.
 - **Invitación VSL:** Gancho (pregunta de resultado) → Para quién es → Presentación + autoridad del líder → Prueba/casos → CTA ("tocá el botón, dejá tus datos") → objeciones ("funciona incluso si…") → CTA final.
 - **3 preguntas de sí → agitar dolor → justificar fallos → atacar enemigo → solución → prueba → CTA.**
+- **Resultados locos/promesa → qué haremos por vos → garantía → prueba social → CTA → calificación.**
+
+**Multi-testing (regla de volumen):** el gancho es el 80%, así que no adivines cuál gana — TESTEÁ. Escribí/grabá MUCHOS ganchos (10-30) sobre pocos textos base y dejá que el mercado elija. Una vez que tenés gancho + creativo ganador, variás sobre ESO.
 
 ## 15. CREATIVOS ROMPE-SCROLL (nota para el brief visual)
 El rol #1 del creativo es captar atención. Gatillos visuales: **contraste** (color/sonido/movimiento que sobresale), **similitud** (gente parecida al avatar), **escena** que llame la atención en el primer segundo. Regla de edición: **cada 1 segundo, un impacto visual.** Música que acompañe la emoción (oscuridad <70 BPM en el problema → luz 100-120 BPM en la solución). Poco texto, que no parezca un anuncio, más brillo/luz suele rendir mejor. Probá 2-4 variantes de imagen y 3-5 creativos por copy.
@@ -116,6 +133,9 @@ El rol #1 del creativo es captar atención. Gatillos visuales: **contraste** (co
 
 ## 18. LA FÓRMULA DEL VALOR (para dimensionar la oferta en el copy)
 Valor percibido ↑ con: **transformación** deseada · **certeza** de conseguirla · **velocidad** · **facilidad**. Valor percibido ↓ con: tiempo para lograrlo · esfuerzo/sacrificio · riesgo · competidores ofreciendo lo mismo. En el copy: subí los dos de arriba (mostrá transformación grande, certera, rápida y fácil CON vos) y bajá los de abajo (mostrá lento/difícil/riesgoso por su cuenta).
+
+## 19. EVITAR BANEOS (para anuncios y páginas del funnel)
+Complementa las líneas rojas del ADN. En la LANDING/página: sin pop-ups salvo que los dispare un clic · usá "Sin costo" en vez de "GRATIS" · sé CLARO sobre el modelo de negocio (nada de "estrategia secreta" — decí qué es en concreto) · disclaimer en el pie ("Este sitio no es parte de Facebook ni está avalado por Facebook…") · link a Política de Privacidad y Términos · sacá TODA afirmación de ingresos, plazos de resultado y pérdida de peso · sin groserías · congruencia con el anuncio · revisá ortografía. En el ANUNCIO: nada de atributos personales asumidos del lector (edad, deudas, salud), decilo en colectivo/hipotético ("muchos que arrancan sienten que…").
 
 ---
 
