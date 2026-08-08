@@ -23,8 +23,32 @@ const DOCS = {
   avatar: { eyebrow: 'AVATARES', accent: 'var(--mk-orange)' },
   estrategia: { eyebrow: 'ESTRATEGIA', accent: 'var(--mk-purple)' },
   copy: { eyebrow: 'COPY DEL FUNNEL', accent: 'var(--mk-purple)' },
+  auditoria: { eyebrow: 'AUDITORÍAS', accent: 'var(--mk-rose, #E11D48)' },
   guias: { eyebrow: 'GUÍAS', accent: 'var(--mk-cyan)' },
 };
+
+// ── Auditorías ──────────────────────────────────────────────────────────────
+// Lo que el equipo concluyó de un período: de qué es, qué fechas mira, quiénes la
+// hicieron y el embudo auditado. Solo llegan acá las que el equipo publicó a
+// propósito; las demás no salen del panel.
+const ALCANCES = { ads: 'Anuncios', vsl: 'VSL', funnel: 'Funnel', completo: 'Auditoría completa' };
+
+// 'YYYY-MM-DD' → Date local. new Date('2026-07-01') es medianoche UTC y en el huso
+// del cliente se lee como el día anterior: hay que partir la cadena a mano.
+const aFecha = (s) => {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(s || ''));
+  return m ? new Date(+m[1], +m[2] - 1, +m[3]) : null;
+};
+const diaMes = (s) => aFecha(s)?.toLocaleDateString('es-AR', { day: 'numeric', month: 'long' }) || '';
+
+function periodoAuditado(desde, hasta) {
+  const d = aFecha(desde); const h = aFecha(hasta);
+  if (!d && !h) return '';
+  if (d && !h) return `Desde el ${diaMes(desde)}`;
+  if (!d && h) return `Hasta el ${diaMes(hasta)}`;
+  const mismoMes = d.getMonth() === h.getMonth() && d.getFullYear() === h.getFullYear();
+  return mismoMes ? `Del ${d.getDate()} al ${diaMes(hasta)}` : `Del ${diaMes(desde)} al ${diaMes(hasta)}`;
+}
 
 // Las GUÍAS GLOBALES (páginas del sistema, iguales para todos los clientes):
 // las escribe el equipo en el panel (menú del DEL → Guías) y acá se ven nativas.
@@ -331,6 +355,8 @@ export default function DocumentoScreen() {
   const esGuion = !esGuias && (data.tipo === 'ads' || data.tipo === 'vsl');
   // "Copy del funnel": las 4 páginas (Pre-landing…Thank you) para leer y aprobar.
   const esCopy = !esGuias && data.tipo === 'copy';
+  // "Auditorías": lo que concluimos de cada período. Se lee, no se aprueba.
+  const esAuditoria = !esGuias && data.tipo === 'auditoria';
   const secciones = Array.isArray(data.secciones) ? data.secciones : [];
   const comentarios = [...(Array.isArray(data.comentarios) ? data.comentarios : []), ...localComs];
   const topComs = comentarios.filter((c) => !c.parentId);
@@ -660,7 +686,13 @@ export default function DocumentoScreen() {
                         </span>
                       </div>
                     )}
-                    {!esCopy && (data.tipo === 'ads' || (data.tipo !== 'ads' && secciones.length > 1)) && (
+                    {/* AUDITORÍA: su encabezado propio. La fecha en que la hicimos,
+                        el período que mira, de qué es, el embudo auditado y quiénes
+                        del equipo la hicieron, con su foto. */}
+                    {esAuditoria && (
+                      <CabezalAuditoria a={s.auditoria} funnel={data.funnel?.name} titulo={s.titulo} />
+                    )}
+                    {!esCopy && !esAuditoria && (data.tipo === 'ads' || (data.tipo !== 'ads' && secciones.length > 1)) && (
                       <div style={{ display: 'flex', alignItems: 'center', gap: 9, flexWrap: 'wrap', marginBottom: 12 }}>
                         <span style={{ fontSize: 16, fontWeight: 800, color: T.text, letterSpacing: '-0.01em' }}>
                           {s.titulo}{esGuion && s.grabado ? '  ✓' : ''}
@@ -897,6 +929,11 @@ export default function DocumentoScreen() {
                     derecha={docs.copy?.pendiente ? 'revisar' : null}
                     onClick={() => { setDrawer(false); nav(`/documento/${sid}/copy`); }} />
                 )}
+                {/* Auditorías: solo aparece si hay alguna publicada para este cliente. */}
+                {docs.auditoria?.existe && (
+                  <FilaDoc dot="var(--mk-rose, #E11D48)" nombre="Auditorías" activo={data.tipo === 'auditoria'}
+                    onClick={() => { setDrawer(false); nav(`/documento/${sid}/auditoria`); }} />
+                )}
               </div>
 
               {/* AYUDA: las guías de grabación, iguales para todos los DEL. */}
@@ -973,6 +1010,57 @@ function FilaDoc({ dot, nombre, activo, derecha, onClick }) {
         <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.06em', color: '#fff', background: 'var(--mk-pink, #EC4899)', padding: '4px 8px', borderRadius: 999 }}>REVISAR</span>
       )}
       {derecha === 'check' && <IcoCheck size={16} stroke="var(--mk-green)" sw={2.6} />}
+    </div>
+  );
+}
+
+// Encabezado de una auditoría: el taco de calendario con la fecha en que la hicimos,
+// de qué es, el embudo auditado, el período que mira y quiénes la hicieron con su
+// foto. Es lo que le da a esta hoja un aire distinto del resto del documento.
+function CabezalAuditoria({ a, funnel, titulo }) {
+  const ROSA = 'var(--mk-rose, #E11D48)';
+  const BORDE = 'var(--mk-rose-border, #FBD5DB)';
+  const f = aFecha(a?.fecha);
+  const periodo = periodoAuditado(a?.desde, a?.hasta);
+  const equipo = Array.isArray(a?.equipo) ? a.equipo : [];
+  return (
+    <div style={{ margin: '2px 0 16px', padding: 15, background: 'var(--mk-rose-bg, #FFF1F2)', border: `1px solid ${BORDE}`, borderRadius: 16 }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 13 }}>
+        {/* Cuándo la hicimos */}
+        <div style={{ flex: 'none', width: 52, borderRadius: 12, overflow: 'hidden', textAlign: 'center', background: '#fff', border: `1px solid ${BORDE}` }}>
+          <div style={{ background: ROSA, color: '#fff', fontSize: 9, fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase', padding: '3px 0' }}>
+            {f ? f.toLocaleDateString('es-AR', { month: 'short' }).replace('.', '') : '—'}
+          </div>
+          <div style={{ fontSize: 21, fontWeight: 800, lineHeight: 1.15, padding: '4px 0 6px', color: T.ink }}>{f ? f.getDate() : '·'}</div>
+        </div>
+
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <div style={{ fontSize: 9.5, fontWeight: 800, letterSpacing: '0.12em', textTransform: 'uppercase', color: ROSA }}>Auditoría</div>
+          <div style={{ fontFamily: "'Montserrat', sans-serif", fontSize: 18, fontWeight: 800, letterSpacing: '-0.02em', color: T.ink, lineHeight: 1.15 }}>
+            {ALCANCES[a?.alcance] || titulo || 'Auditoría completa'}
+          </div>
+          {funnel && (
+            <div style={{ marginTop: 5, display: 'inline-flex', alignItems: 'center', fontSize: 11, fontWeight: 700, color: ROSA, background: '#fff', border: `1px solid ${BORDE}`, borderRadius: 999, padding: '3px 9px' }}>
+              {funnel}
+            </div>
+          )}
+          {periodo && (
+            <div style={{ marginTop: 7, fontSize: 12.5, fontWeight: 600, color: '#7A5560' }}>{periodo}</div>
+          )}
+        </div>
+      </div>
+
+      {equipo.length > 0 && (
+        <div style={{ marginTop: 13, paddingTop: 12, borderTop: `1px solid ${BORDE}`, display: 'flex', alignItems: 'center', gap: 9, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 11, fontWeight: 700, color: '#9C7A82' }}>La hicimos:</span>
+          {equipo.map((p, i) => (
+            <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, background: '#fff', border: `1px solid ${BORDE}`, borderRadius: 999, padding: '3px 11px 3px 3px' }}>
+              <Avatar resp={p} size={24} />
+              <span style={{ fontSize: 12, fontWeight: 700, color: T.textSoft }}>{p.nombre}</span>
+            </span>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

@@ -10,7 +10,9 @@ import { engancharChecklist } from './checklistHtml';
 import { sanitizeDelHtml } from './delSanitize';
 import { getCfgJump, clearCfgJump } from './cfgJump';
 import { BLUEPRINTS } from './blueprints';
-import { resolveDelTabs, esGrabable } from './delTabs';
+import { resolveDelTabs, esGrabable, ALWAYS_KINDS, AUDIT_KIND } from './delTabs';
+import AuditoriaHeader from './AuditoriaHeader';
+import { tituloAuditoria } from './auditoriaFmt';
 import { publicOrigin } from '../../../utils/helpers';
 
 // Color estable por persona (para la presencia y los comentarios).
@@ -284,8 +286,8 @@ function TituloEditable({ value, onSave }) {
   );
 }
 
-export default function DelEditor({ strategyId, docId, docUrl, clientId, siblingDels = [], estrategiaNode, configNode, recursosNode, onAvatarCreate, onVersionComplete, onVersionDelete }) {
-  const { currentUser, appSettings } = useApp();
+export default function DelEditor({ strategyId, docId, docUrl, clientId, funnelName, siblingDels = [], estrategiaNode, configNode, recursosNode, onAvatarCreate, onVersionComplete, onVersionDelete }) {
+  const { currentUser, appSettings, teamMembers } = useApp();
   // Categorías/pestañas del DEL, configurables desde Ajustes (P9). Con fallback al default.
   const { SEC, secOf, KIND_ORDER, kindRank, STANDARD_KINDS, MOVE_KINDS, VERSIONABLE_KINDS, kindCat } =
     useMemo(() => resolveDelTabs(appSettings), [appSettings]);
@@ -311,6 +313,8 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, sibling
   // versión (una V2 "solo formulario" no arrastra Pre-landing ni Landing vacías).
   const [verMeta, setVerMeta] = useState({});
   const [aprobacion, setAprobacion] = useState({});   // { [sectionId]: {estado, actorTipo, actorNombre, at} }
+  // Encabezado de cada AUDITORÍA: { [sectionId]: {fecha, desde, hasta, alcance, equipo, visibleCliente} }
+  const [auditorias, setAuditorias] = useState({});
   const [pasoModal, setPasoModal] = useState(null);   // { v } → elegir qué paso agregar
   const [editVer, setEditVer] = useState(null);       // { v, titulo, nota } → editar la ficha
   const [verModal, setVerModal] = useState(null); // modal "nueva versión": { scope:'paginas'|'completa', avatars:Set }
@@ -629,6 +633,33 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, sibling
       .catch(() => setAprobacion({}));
   }, [docId]);
   useEffect(() => { cargarAprobacion(); }, [cargarAprobacion]);
+
+  // Encabezados de las auditorías del DEL (fecha, período auditado, alcance, quiénes
+  // la hicieron, si la ve el cliente). Van aparte de las secciones porque son de otra
+  // tabla; una consulta por documento, igual que la aprobación.
+  const cargarAuditorias = useCallback(() => {
+    if (!docId) return Promise.resolve();
+    return supabase.rpc('del_auditorias_doc', { p_doc_id: docId })
+      .then(({ data }) => setAuditorias(data && typeof data === 'object' ? data : {}))
+      .catch(() => setAuditorias({}));
+  }, [docId]);
+  useEffect(() => { cargarAuditorias(); }, [cargarAuditorias]);
+
+  // Guardar la ficha de una auditoría. Optimista: el encabezado se dibuja con el
+  // cambio puesto y, si la base lo rechaza, se vuelve a leer lo que hay de verdad.
+  const guardarAuditoria = async (sectionId, f) => {
+    setAuditorias((prev) => ({ ...prev, [sectionId]: f }));
+    const { data, error } = await supabase.rpc('del_auditoria_set', {
+      p_section_id: sectionId, p_fecha: f.fecha || null, p_desde: f.desde || null,
+      p_hasta: f.hasta || null, p_alcance: f.alcance || 'completo',
+      p_equipo: Array.isArray(f.equipo) ? f.equipo.map(String) : [],
+      p_visible: !!f.visibleCliente, p_by: by,
+    });
+    if (error || !data?.ok) {
+      window.alert('No pude guardar la auditoría' + (data?.error ? ': ' + data.error : '') + '.');
+      await cargarAuditorias();
+    }
+  };
 
   // Documentos del cliente (aparecen en todos sus DEL), para el grupo "DEL CLIENTE".
   // Se pueden quitar/agregar: el que se quita se guarda como "excluido" (client_brain_pins
@@ -1256,7 +1287,9 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, sibling
       if (payload.row.id === myEditingRef.current) return;
       setSecs(prev => prev ? prev.map(s => (s.id === payload.row.id ? { ...s, ...payload.row } : s)) : prev);
     });
-    ch.on('broadcast', { event: 'section-add' }, () => { cargar(); });
+    // Alguien agregó, movió o recuperó una sección: además de releer el documento
+    // hay que releer las fichas de las auditorías, que viven en otra tabla.
+    ch.on('broadcast', { event: 'section-add' }, () => { cargar(); cargarAuditorias(); });
     ch.on('broadcast', { event: 'section-del' }, ({ payload }) => {
       if (payload?.id) setSecs(prev => prev ? prev.filter(s => s.id !== payload.id) : prev);
     });
@@ -1264,7 +1297,7 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, sibling
       if (status === 'SUBSCRIBED') await ch.track({ id: by, name: myName, color: myColor, editing: null });
     });
     return () => { channelRef.current = null; supabase.removeChannel(ch); };
-  }, [strategyId, by, myName, myColor, cargar]);
+  }, [strategyId, by, myName, myColor, cargar, cargarAuditorias]);
 
   // Cuando cambia qué sección estoy editando, lo aviso por presencia (para el candado).
   useEffect(() => {
@@ -1349,7 +1382,11 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, sibling
     const base = (Array.isArray(pasos) && pasos.length > 0)
       ? pasos
       : (Array.isArray(pasos) ? [] : STANDARD_KINDS);   // [] = se sacaron todos a propósito
-    const kinds = Array.from(new Set(['estrategia', ...base, ...sorted.map(s => s.kind)]));
+    // ALWAYS_KINDS (Estrategia y Auditorías) están en todo DEL y no son pasos del
+    // embudo: no salen de `pasos` ni se pueden quitar. Sin esto, la categoría de
+    // Auditorías no existiría hasta tener una escrita, y no habría dónde crear la
+    // primera.
+    const kinds = Array.from(new Set([...ALWAYS_KINDS, ...base, ...sorted.map(s => s.kind)]));
     kinds.sort((a, b) => kindRank(a) - kindRank(b));
     return kinds.map(k => ({ kind: k, items: byKind[k] || [] }));
   }, [sorted, verActiva, kindVersionsMap, verMeta]);
@@ -1397,13 +1434,24 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, sibling
 
   const agregar = async (afterOrd, kind = 'otros') => {
     if (!resolvedDoc) return;
+    // Una auditoría nace con la fecha de hoy en el título: en el índice se distinguen
+    // por cuándo se hicieron, no por un "Sección nueva" repetido.
+    const titulo = kind === AUDIT_KIND ? tituloAuditoria() : 'Sección nueva';
     const { data, error } = await supabase.rpc('del_section_add', {
-      p_doc_id: resolvedDoc, p_title: 'Sección nueva', p_kind: kind || 'otros', p_after_ord: afterOrd ?? null, p_by: by,
+      p_doc_id: resolvedDoc, p_title: titulo, p_kind: kind || 'otros', p_after_ord: afterOrd ?? null, p_by: by,
     });
     if (error) { window.alert('No pude agregar la sección: ' + error.message); return; }
     // Si la categoría versiona, la sección nueva nace en la versión que estás viendo (V2, V3…).
     if (data && VERSIONABLE_KINDS.includes(kind) && verActiva > 1) {
       await supabase.rpc('del_section_set_version', { p_id: data, p_version: verActiva, p_by: by });
+    }
+    // La ficha de la auditoría se crea con la sección: fecha de hoy y quien la está
+    // creando como primer autor. Nace privada — se publica al cliente a propósito.
+    if (data && kind === AUDIT_KIND) {
+      const hoy = new Date();
+      const iso = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-${String(hoy.getDate()).padStart(2, '0')}`;
+      const yo = (teamMembers || []).some(m => String(m.id) === String(by)) ? [String(by)] : [];
+      await guardarAuditoria(data, { fecha: iso, desde: null, hasta: null, alcance: 'completo', equipo: yo, visibleCliente: false });
     }
     await cargar();
     emitir('section-add', {});
@@ -1456,6 +1504,7 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, sibling
     }
     await cargar();
     await cargarVersiones();
+    await cargarAuditorias();   // si era una auditoría, su ficha también volvió
     emitir('section-add', {});
     setAviso(`Recuperada "${s.title}"`);
   };
@@ -2212,7 +2261,13 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, sibling
                   {/* ACCIÓN DEL CLIENTE + ESTADO por pestaña (reemplazan el tilde 🎬):
                       la acción dice qué hace el cliente con esta pestaña; el estado
                       dice si ya está terminada. El cliente solo ve lo TERMINADO que
-                      no sea "Solo equipo". Grabarse+Terminado = le aparece para grabar. */}
+                      no sea "Solo equipo". Grabarse+Terminado = le aparece para grabar.
+
+                      Las AUDITORÍAS no llevan este par: no tienen circuito (no se
+                      revisan ni se aprueban) y su visibilidad es el interruptor del
+                      encabezado. Dos controles de visibilidad compitiendo era la
+                      forma segura de publicar algo sin querer. */}
+                  {s.kind !== AUDIT_KIND && (<>
                   <select
                     value={s.accion_cliente || 'solo_equipo'}
                     onChange={(e) => setSeccionMeta(s, { accion: e.target.value })}
@@ -2247,6 +2302,7 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, sibling
                     <option value="en_construccion">🔨 En construcción</option>
                     <option value="terminado">✔ Terminado</option>
                   </select>
+                  </>)}
                   {/* Secciones que NO se graban (landings, formulario, thank you…):
                       no llevan responsable ni fase, pero sí muestran que el cliente
                       ya las aprobó o que pidió correcciones. */}
@@ -2421,6 +2477,19 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, sibling
                   )}
                   {!editando && <span className="text-[10.5px] text-[#C3C9D4] tabular-nums shrink-0">{(s.char_count || 0).toLocaleString('es-AR')}</span>}
                 </div>
+
+                {/* AUDITORÍA: encabezado exclusivo con la fecha, el período auditado,
+                    de qué es, quiénes la hicieron (con su foto) y el embudo auditado
+                    —el de este DEL—. Más el interruptor de "la ve el cliente". */}
+                {s.kind === AUDIT_KIND && (
+                  <AuditoriaHeader
+                    datos={auditorias[s.id]}
+                    editando={editando && !lock}
+                    teamMembers={teamMembers}
+                    funnelName={funnelName}
+                    onGuardar={(f) => guardarAuditoria(s.id, f)}
+                  />
+                )}
 
                 {/* Si OTRO está editando esta sección, no dejo editarla acá: se ve el
                     candado y el contenido en lectura, para no pisarse. */}

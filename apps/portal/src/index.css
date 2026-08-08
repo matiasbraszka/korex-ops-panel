@@ -38,6 +38,10 @@
   --mk-purple:       #8B5CF6;
   --mk-purple-bg:    #F5F3FF;
   --mk-cyan:         #06B6D4;
+  /* Auditorías: el mismo color que la categoría en el panel del equipo. */
+  --mk-rose:         #E11D48;
+  --mk-rose-bg:      #FFF1F2;
+  --mk-rose-border:  #FBD5DB;
   --shadow-sm:  0 1px 2px rgba(10,22,40,.04), 0 1px 3px rgba(10,22,40,.06);
   --shadow-md:  0 4px 12px rgba(10,22,40,.06), 0 2px 4px rgba(10,22,40,.04);
   --shadow-lg:  0 12px 32px rgba(10,22,40,.08), 0 4px 12px rgba(10,22,40,.05);

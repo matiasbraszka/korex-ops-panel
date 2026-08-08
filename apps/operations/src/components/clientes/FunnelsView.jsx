@@ -1200,7 +1200,7 @@ Quedo a la espera de tu respuesta`;
       {/* El lector va a pantalla completa: un DEL promedia 56.000 caracteres —
           adentro del acordeon de la fila no se lee. */}
       <Modal open={delOpen} onClose={() => setDelOpen(false)} fullScreen title={`DEL · ${f.name}`}>
-        <DelEditor strategyId={f.strategy_id} docId={delDocId} docUrl={delDocUrl} clientId={clientId} siblingDels={siblingDels}
+        <DelEditor strategyId={f.strategy_id} docId={delDocId} docUrl={delDocUrl} clientId={clientId} funnelName={f.name} siblingDels={siblingDels}
           estrategiaNode={funnelEstrategiaNode} configNode={funnelConfigNode} recursosNode={funnelRecursosNode} onAvatarCreate={onAvatarCreate} onVersionComplete={onVersionComplete} onVersionDelete={onVersionDelete} />
       </Modal>
     </div>

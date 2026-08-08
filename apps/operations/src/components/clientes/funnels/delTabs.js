@@ -12,16 +12,38 @@ export const SEC_BASE = {
   pg_formulario:  { c: '#8B5CF6', bg: '#F5F3FF', label: 'Formulario' },
   pg_thankyou:    { c: '#8B5CF6', bg: '#F5F3FF', label: 'Thank you' },
   pg_testimonios: { c: '#8B5CF6', bg: '#F5F3FF', label: 'Testimonios' },
+  auditoria:      { c: '#E11D48', bg: '#FFF1F2', label: 'Auditorías' },
   mensajes:       { c: '#0D9488', bg: '#F0FDFA', label: 'Mensajes' },
   pipeline_viejo: { c: '#9CA3AF', bg: '#F4F5F7', label: 'Estado (viejo)' },
   otros:          { c: '#9CA3AF', bg: '#F4F5F7', label: 'Otros' },
 };
 
-const KIND_ORDER_BASE = ['estrategia', 'avatares', 'vsl', 'anuncios', 'pg_prelanding', 'pg_landing', 'pg_formulario', 'pg_thankyou', 'pg_testimonios', 'mensajes', 'pipeline_viejo', 'otros'];
+const KIND_ORDER_BASE = ['estrategia', 'avatares', 'vsl', 'anuncios', 'pg_prelanding', 'pg_landing', 'pg_formulario', 'pg_thankyou', 'pg_testimonios', 'auditoria', 'mensajes', 'pipeline_viejo', 'otros'];
 // Categorías que SIEMPRE existen en TODO DEL, aunque estén vacías (pedido de Matías).
 const STANDARD_KINDS_BASE = ['avatares', 'vsl', 'anuncios', 'pg_prelanding', 'pg_landing', 'pg_formulario', 'pg_thankyou', 'pg_testimonios'];
 // Categorías a las que se puede MOVER una sección.
-const MOVE_KINDS_BASE = ['estrategia', 'avatares', 'vsl', 'anuncios', 'pg_prelanding', 'pg_landing', 'pg_formulario', 'pg_thankyou', 'pg_testimonios', 'mensajes', 'otros'];
+const MOVE_KINDS_BASE = ['estrategia', 'avatares', 'vsl', 'anuncios', 'pg_prelanding', 'pg_landing', 'pg_formulario', 'pg_thankyou', 'pg_testimonios', 'auditoria', 'mensajes', 'otros'];
+
+// Categorías que están en TODO DEL pero NO son un paso del embudo.
+//
+// Es distinto de STANDARD_KINDS: esas son los pasos (Pre-landing, Landing…), se
+// guardan en del_versions.pasos y se pueden sacar cuando un embudo no los lleva.
+// Estas dos no: la Estrategia y las Auditorías no dependen de la versión ni del
+// recorrido del embudo, y sacarlas no querría decir nada.
+export const ALWAYS_KINDS = ['estrategia', 'auditoria'];
+
+// La categoría de AUDITORÍAS. Cada sección de este tipo lleva, además del texto, un
+// encabezado propio en del_auditorias (fecha, período auditado, alcance, quiénes la
+// hicieron y si el cliente la ve). No versiona: una auditoría pertenece a una fecha,
+// no a la V2 del embudo.
+export const AUDIT_KIND = 'auditoria';
+export const AUDIT_ALCANCES = [
+  { key: 'completo', label: 'Auditoría completa', corto: 'Completa' },
+  { key: 'ads',      label: 'Anuncios',           corto: 'Anuncios' },
+  { key: 'vsl',      label: 'VSL',                corto: 'VSL' },
+  { key: 'funnel',   label: 'Funnel',             corto: 'Funnel' },
+];
+export const alcanceLabel = (k) => AUDIT_ALCANCES.find(a => a.key === k)?.label || 'Auditoría completa';
 // Categorías que VERSIONAN (V1/V2/V3). El avatar NO versiona; la estrategia sí.
 const VERSIONABLE_KINDS_BASE = ['estrategia', 'vsl', 'anuncios', 'pg_prelanding', 'pg_landing', 'pg_formulario', 'pg_thankyou', 'pg_testimonios'];
 
