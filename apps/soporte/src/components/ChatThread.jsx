@@ -3,6 +3,7 @@ import { ArrowDown, ChevronLeft, PanelRight, CalendarPlus, Users, Forward, X, At
 import { useSoporte } from '../context/SoporteContext.jsx';
 import { useAuth } from '@korex/auth';
 import { initials, dayKey, colorFromString, convName, fmtPhone } from '../lib/format.js';
+import { fetchMessagesByWaId } from '../lib/api.js';
 import MessageBubble from './MessageBubble.jsx';
 import Composer from './Composer.jsx';
 import ForwardModal from './ForwardModal.jsx';
@@ -19,7 +20,7 @@ const WALLPAPER = {
 };
 
 export default function ChatThread({ onBack, onOpenPanel, onSchedule }) {
-  const { selectedId, selectedConversation, threads, loadOlder, retrySend, discardFailed, deleteForEveryone, groupDirByConv, loadGroupDirectory, ourLids } = useSoporte();
+  const { selectedId, selectedConversation, threads, loadOlder, retrySend, discardFailed, deleteForEveryone, editMessage, groupDirByConv, loadGroupDirectory, ourLids } = useSoporte();
   const { isAdmin } = useAuth();
   const scrollRef = useRef(null);
   const [showJump, setShowJump] = useState(false);
@@ -46,6 +47,21 @@ export default function ChatThread({ onBack, onOpenPanel, onSchedule }) {
       window.alert('No se pudo eliminar para todos. Puede que WhatsApp ya no lo permita (pasó demasiado tiempo desde que se envió).');
     }
   }, [deleteForEveryone, selectedId]);
+
+  // Editar un mensaje ya enviado. El texto se corrige en el mismo campo de escribir
+  // (con una barra arriba que avisa qué se está haciendo), igual que WhatsApp.
+  const [editando, setEditando] = useState(null);
+  const empezarEdicion = useCallback((m) => { setEditando(m); setReplyTo(null); }, []);
+  const guardarEdicion = useCallback(async (m, texto) => {
+    setEditando(null);
+    try {
+      await editMessage(selectedId, m.id, texto);
+    } catch (e) {
+      window.alert(e?.message || 'No se pudo editar el mensaje.');
+    }
+  }, [editMessage, selectedId]);
+  // Si se cambia de chat, la edición a medias no tiene sentido.
+  useEffect(() => { setEditando(null); }, [selectedId]);
   const stickToBottom = useRef(true);
   const prevHeightRef = useRef(null);
 
@@ -109,6 +125,35 @@ export default function ChatThread({ onBack, onOpenPanel, onSchedule }) {
     for (const it of thread.items) if (it.wa_message_id) m[it.wa_message_id] = it;
     return m;
   }, [thread.items]);
+
+  // El hilo se carga de a 50 mensajes, así que citar uno viejo dejaba la burbuja
+  // citada en blanco: el mensaje existe, pero todavía no está en pantalla. Se piden
+  // aparte los que faltan, una sola vez cada uno.
+  const [citasSueltas, setCitasSueltas] = useState({});
+  const citasPedidas = useRef(new Set());
+  const faltantes = useMemo(() => {
+    const out = [];
+    for (const it of thread.items) {
+      const q = it.reply_to;
+      if (q && !byWaId[q] && !citasSueltas[q] && !citasPedidas.current.has(q)) out.push(q);
+    }
+    return out;
+  }, [thread.items, byWaId, citasSueltas]);
+  useEffect(() => {
+    if (!faltantes.length) return;
+    faltantes.forEach((id) => citasPedidas.current.add(id));
+    fetchMessagesByWaId(faltantes)
+      .then((rows) => {
+        if (!rows?.length) return;
+        setCitasSueltas((m) => {
+          const n = { ...m };
+          for (const r of rows) if (r.wa_message_id) n[r.wa_message_id] = r;
+          return n;
+        });
+      })
+      .catch(() => { faltantes.forEach((id) => citasPedidas.current.delete(id)); });
+  }, [faltantes]);
+  const citaDe = (m) => (m.reply_to ? (byWaId[m.reply_to] || citasSueltas[m.reply_to] || null) : null);
 
   // Mensajes seleccionados para reenviar (en orden del hilo).
   const selectedMsgs = useMemo(() => thread.items.filter((m) => selected.has(m.id)), [thread.items, selected]);
@@ -282,10 +327,11 @@ export default function ChatThread({ onBack, onOpenPanel, onSchedule }) {
                   onForward={enterSelect}
                   onReply={setReplyTo}
                   onDeleteForEveryone={handleDelete}
+                  onEdit={empezarEdicion}
                   selectMode={selectMode}
                   selected={selected.has(g.msg.id)}
                   onToggleSelect={toggleSelect}
-                  quotedMsg={g.msg.reply_to ? byWaId[g.msg.reply_to] : null}
+                  quotedMsg={citaDe(g.msg)}
                   mentions={mentions}
                 />
                 </div>
@@ -322,6 +368,7 @@ export default function ChatThread({ onBack, onOpenPanel, onSchedule }) {
         </div>
       ) : (
         <Composer replyTo={replyTo} onClearReply={() => setReplyTo(null)}
+                  editando={editando} onCancelEdit={() => setEditando(null)} onGuardarEdit={guardarEdicion}
                   onSent={() => { stickToBottom.current = true; }} />
       )}
 

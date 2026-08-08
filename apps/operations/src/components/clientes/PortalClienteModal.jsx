@@ -50,7 +50,7 @@ export default function PortalClienteModal({ client, onClose }) {
   const [collabs, setCollabs] = useState([]);           // colaboradores registrados
   const [grab, setGrab] = useState(null);               // resumen de grabaciones
   const [funnelsOpen, setFunnelsOpen] = useState(null); // colaborador con el selector de embudos abierto
-  const { strategyPages, updateStrategyPage } = useApp();
+  const { strategyPages, updateStrategyPage, updateClient } = useApp();
   const funnels = (strategyPages || []).filter((p) => p.client_id === client.id);
 
   const cargar = async () => {
@@ -162,6 +162,15 @@ export default function PortalClienteModal({ client, onClose }) {
     try { await updateStrategyPage(f.id, { ads_target: v }); }
     catch { setErr('No se pudo guardar la cantidad de anuncios.'); }
   };
+  // Cuántos embudos contrató, por tipo. Vacío = no definido: el cliente no ve contador.
+  const setFunnelsContratados = async (campo, raw) => {
+    const t = String(raw).trim();
+    const v = t === '' ? null : Math.max(0, parseInt(t, 10) || 0);
+    if (v === (client[campo] ?? null)) return;
+    try { await updateClient(client.id, { [campo]: v }); }
+    catch { setErr('No se pudo guardar la cantidad de embudos.'); }
+  };
+
   // El equipo aprueba (o desmarca) que un guión ya está grabado, tras verificarlo.
   const marcarGrabado = async (g, val) => {
     if (val && !window.confirm(`¿Confirmás que "${g.titulo}" ya está grabado y completo?`)) return;
@@ -267,6 +276,39 @@ export default function PortalClienteModal({ client, onClose }) {
             ))}
           </div>
         )}
+
+        {/* ── EMBUDOS CONTRATADOS: cuántos pagó, de qué tipo ──────────────
+            Va acá, pegado a "Anuncios a entregar", porque es la misma clase de dato:
+            qué le prometimos. Hasta ahora no estaba en ningún lado — clients.service
+            es texto libre— así que ni el cliente ni el equipo podían ver si ya se
+            entregó lo pagado. Con esto el cliente ve "Producto 2 de 3" en su Inicio. */}
+        <div className="rounded-xl border border-[#E2E5EB] p-3.5 flex flex-col gap-2.5">
+          <div className="flex items-center gap-2">
+            <BadgeCheck size={15} color="#15803D" />
+            <span className="text-[12.5px] font-bold text-[#1A1D26] flex-1">Embudos contratados</span>
+          </div>
+          <div className="text-[11px] text-[#6B7280] leading-relaxed -mt-1">
+            Cuántos embudos pagó, por tipo. El cliente ve cuántos van entregados de esos.
+            Dejalo vacío si todavía no está definido: sin número, no se le muestra nada.
+          </div>
+          <div className="flex flex-col">
+            {[
+              { k: 'funnelsProducto', label: 'Producto', tipo: 'producto' },
+              { k: 'funnelsReclutamiento', label: 'Reclutamiento', tipo: 'reclutamiento' },
+            ].map(({ k, label, tipo }) => {
+              const entregados = funnels.filter(f => f.tipo === tipo && f.status !== 'borrador').length;
+              return (
+                <div key={k} className="flex items-center gap-2 py-1.5 border-t border-[#F1F3F7]">
+                  <div className="flex-1 min-w-0 text-[12px] font-semibold text-[#1A1D26]">{label}</div>
+                  <span className="text-[11px] text-[#9098A4] whitespace-nowrap">{entregados} entregado{entregados === 1 ? '' : 's'}</span>
+                  <input type="number" min="0" defaultValue={client[k] ?? ''} placeholder="ej. 2"
+                    onBlur={(e) => setFunnelsContratados(k, e.target.value)}
+                    className="w-20 text-center py-1.5 px-2 text-[13px] font-bold text-[#1A1D26] bg-white border border-[#D5DCE7] rounded-lg outline-none focus:border-[#2E69E0]" />
+                </div>
+              );
+            })}
+          </div>
+        </div>
 
         {/* ── ANUNCIOS A ENTREGAR: el trato con el cliente ────────────────
             Estaba adentro del DEL, en la configuración del funnel. Es un número

@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Send, Paperclip, X, FileText, Image as ImageIcon, Film, Music, Mic, Trash2, User } from 'lucide-react';
+import { Send, Paperclip, X, FileText, Image as ImageIcon, Film, Music, Mic, Trash2, User, Smile } from 'lucide-react';
 import { useSoporte } from '../context/SoporteContext.jsx';
 import { convName, colorFromString, initials } from '../lib/format.js';
+import EmojiPicker from './EmojiPicker.jsx';
 
 const MAX_FILE_MB = 12;
 
@@ -28,10 +29,11 @@ const DEFAULT_TEMPLATES = [
 
 // Composer — Diseño A: card redondeada, foco ámbar, enviar circular ámbar.
 // Tipear «/» al inicio abre el popover de respuestas rápidas (↑↓ Enter Esc).
-export default function Composer({ onSent, replyTo, onClearReply }) {
+export default function Composer({ onSent, replyTo, onClearReply, editando, onCancelEdit, onGuardarEdit }) {
   const { selectedId, selectedConversation, sendMessage, sendAttachment, getDraft, setDraft, templates: configTemplates, groupDirByConv } = useSoporte();
   const [text, setText] = useState('');
   const [file, setFile] = useState(null);
+  const [emojiOpen, setEmojiOpen] = useState(false);
   const [fileError, setFileError] = useState('');
   const [dragging, setDragging] = useState(false);
   const [slashDismissed, setSlashDismissed] = useState(false);
@@ -172,11 +174,47 @@ export default function Composer({ onSent, replyTo, onClearReply }) {
   // Al elegir "responder", enfocar el cuadro de texto.
   useEffect(() => { if (replyTo) taRef.current?.focus(); }, [replyTo]);
 
+  // Al empezar a editar, el cuadro se llena con el texto actual del mensaje y el
+  // cursor queda al final: se corrige la errata sin volver a escribir todo. Al
+  // cancelar, vuelve el borrador que había.
+  const editIdRef = useRef(null);
+  useEffect(() => {
+    if (editando?.id === editIdRef.current) return;
+    editIdRef.current = editando?.id ?? null;
+    setText(editando ? (editando.body || '') : getDraft(selectedId));
+    const ta = taRef.current;
+    if (!ta) return;
+    ta.focus();
+    requestAnimationFrame(() => {
+      ta.style.height = 'auto';
+      ta.style.height = Math.min(ta.scrollHeight, 120) + 'px';
+      const n = ta.value.length;
+      ta.setSelectionRange(n, n);
+    });
+  }, [editando, getDraft, selectedId]);
+
   const autosize = () => {
     const ta = taRef.current;
     if (!ta) return;
     ta.style.height = 'auto';
     ta.style.height = Math.min(ta.scrollHeight, 120) + 'px';
+  };
+
+  // Emoji: se mete donde está el cursor (no al final), como cualquier editor. Es la
+  // misma mecánica que ya usa el picker de menciones.
+  const insertarEmoji = (emoji) => {
+    const ta = taRef.current;
+    const ini = ta ? ta.selectionStart : text.length;
+    const fin = ta ? ta.selectionEnd : text.length;
+    const next = text.slice(0, ini) + emoji + text.slice(fin);
+    setText(next);
+    if (!editando) setDraft(selectedId, next);
+    requestAnimationFrame(() => {
+      ta?.focus();
+      const p = ini + emoji.length;
+      ta?.setSelectionRange(p, p);
+      autosize();
+    });
   };
 
   // Detecta si el cursor está escribiendo una mención (@algo) para abrir el picker.
@@ -289,6 +327,19 @@ export default function Composer({ onSent, replyTo, onClearReply }) {
 
   const submit = () => {
     const body = text.trim();
+
+    // Editando un mensaje ya enviado: no se manda uno nuevo, se corrige aquel.
+    // La ventana de 15 minutos la valida el servidor; acá solo se muestra el error.
+    if (editando) {
+      if (!body || body === editando.body) { onCancelEdit?.(); return; }
+      onGuardarEdit?.(editando, body);
+      setText('');
+      setDraft(selectedId, '');
+      const ta0 = taRef.current;
+      if (ta0) ta0.style.height = 'auto';
+      return;
+    }
+
     const quotedId = replyTo?.wa_message_id || null;
     if (file) {
       sendAttachment(selectedId, { base64: file.base64, mimetype: file.mimetype, filename: file.filename, kind: file.kind, caption: body, quotedId });
@@ -445,7 +496,21 @@ export default function Composer({ onSent, replyTo, onClearReply }) {
         </div>
       )}
 
-      {replyTo && !recording && (
+      {editando && !recording && (
+        <div className="flex items-center gap-2.5 mb-2 px-2.5 py-2 rounded-xl border border-[#C7D2FE] bg-[#EEF3FF]">
+          <span className="w-0.5 self-stretch rounded-full bg-[#2E69E0] shrink-0" />
+          <div className="flex-1 min-w-0">
+            <div className="text-[11px] font-bold text-[#2E69E0]">Editando tu mensaje</div>
+            <div className="text-[11.5px] text-text2 truncate">Se cambia también en el WhatsApp del contacto.</div>
+          </div>
+          <button onClick={onCancelEdit} title="Cancelar edición"
+                  className="bg-transparent border-0 text-text3 hover:text-text cursor-pointer p-1 shrink-0">
+            <X size={15} />
+          </button>
+        </div>
+      )}
+
+      {replyTo && !editando && !recording && (
         <div className="flex items-center gap-2.5 mb-2 px-2.5 py-2 rounded-xl border border-[#C8D6FF] bg-[#EEF3FF]">
           <span className="w-0.5 self-stretch rounded-full bg-[#4A67D8] shrink-0" />
           <div className="flex-1 min-w-0">
@@ -484,6 +549,13 @@ export default function Composer({ onSent, replyTo, onClearReply }) {
                   className="shrink-0 w-9 h-9 rounded-xl border-0 bg-transparent text-text3 hover:text-[#B45309] hover:bg-[#FEF0D7] cursor-pointer flex items-center justify-center transition-colors duration-150 mb-0.5">
             <Paperclip size={17} />
           </button>
+          <div className="relative shrink-0 mb-0.5">
+            <button onClick={() => setEmojiOpen((v) => !v)} title="Emojis"
+                    className={`w-9 h-9 rounded-xl border-0 bg-transparent cursor-pointer flex items-center justify-center transition-colors duration-150 ${emojiOpen ? 'text-[#B45309] bg-[#FEF0D7]' : 'text-text3 hover:text-[#B45309] hover:bg-[#FEF0D7]'}`}>
+              <Smile size={17} />
+            </button>
+            {emojiOpen && <EmojiPicker onPick={insertarEmoji} onClose={() => setEmojiOpen(false)} />}
+          </div>
           <textarea
             ref={taRef}
             value={text}
@@ -491,7 +563,7 @@ export default function Composer({ onSent, replyTo, onClearReply }) {
             onKeyDown={onKeyDown}
             onPaste={onPaste}
             rows={1}
-            placeholder={file ? 'Descripción (opcional)…' : 'Escribí un mensaje…'}
+            placeholder={editando ? 'Corregí el mensaje…' : (file ? 'Descripción (opcional)…' : 'Escribí un mensaje…')}
             className="flex-1 resize-none text-[13px] leading-relaxed py-1.5 border-0 bg-transparent outline-none min-h-[32px] max-h-[120px]"
           />
           {canSend ? (

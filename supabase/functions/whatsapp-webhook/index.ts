@@ -81,6 +81,28 @@ function extractBody(message: Record<string, unknown> | null | undefined): strin
   );
 }
 
+// A qué mensaje CITA este, si cita a alguno. WhatsApp lo manda como
+// contextInfo.stanzaId: el id del mensaje citado, el mismo que guardamos en
+// wa_message_id. Evolution v2 lo pone en el nivel de arriba del evento; Baileys
+// clasico lo mete dentro del contenido (extendedTextMessage y las medias tambien
+// pueden traerlo). Se miran todos los lugares y gana el primero que aparezca.
+function quotedIdDe(item: Record<string, any>, unwrapped: Record<string, any>): string | null {
+  const candidatos = [
+    item?.contextInfo,
+    unwrapped?.extendedTextMessage?.contextInfo,
+    unwrapped?.imageMessage?.contextInfo,
+    unwrapped?.videoMessage?.contextInfo,
+    unwrapped?.audioMessage?.contextInfo,
+    unwrapped?.documentMessage?.contextInfo,
+    unwrapped?.stickerMessage?.contextInfo,
+  ];
+  for (const c of candidatos) {
+    const id = str(c?.stanzaId);
+    if (id) return id;
+  }
+  return null;
+}
+
 // Referencia de media para descarga diferida (la bandeja la resolvera despues).
 function extractMediaId(message: Record<string, unknown> | null | undefined): string | null {
   if (!message) return null;
@@ -372,6 +394,15 @@ async function processMessage(item: Record<string, any>): Promise<string | null>
   const participantAlt = isGroup && key.participantAlt ? str(key.participantAlt) : null;
   const senderTelefono = participantAlt ? '+' + (participantAlt.match(/\d+/g) || []).join('') : null;
 
+  // ¿Este mensaje CITA a otro? En WhatsApp el "responder" viaja como contextInfo.stanzaId
+  // (el wa_message_id del citado). La bandeja ya sabe dibujar la burbuja citada y ya
+  // manda la cita al enviar; lo que faltaba era leerla al RECIBIR. Sin esto, la
+  // respuesta de un cliente llegaba suelta y había que adivinar a qué contestaba.
+  //
+  // Evolution v2 pone contextInfo en el nivel de arriba del evento, no dentro del
+  // mensaje; se miran los dos por las dudas.
+  const replyTo = quotedIdDe(item, unwrapped);
+
   const { data: inserted, error: msgError } = await supabase.from("wa_messages").upsert(
     {
       conversation_id: conversationId,
@@ -386,6 +417,7 @@ async function processMessage(item: Record<string, any>): Promise<string | null>
       status: fromMe ? "sent" : "received",
       payload: item,
       wa_timestamp: waTimestamp,
+      ...(replyTo ? { reply_to: replyTo } : {}),
     },
     { onConflict: "wa_message_id", ignoreDuplicates: true },
   ).select("id");

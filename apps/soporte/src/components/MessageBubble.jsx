@@ -1,4 +1,4 @@
-import { Clock, AlertCircle, CheckCheck, Forward, Reply, CircleCheck, Circle, Trash2, Ban, User, Phone } from 'lucide-react';
+import { Clock, AlertCircle, CheckCheck, Forward, Reply, CircleCheck, Circle, Trash2, Ban, User, Phone, Pencil } from 'lucide-react';
 import { fmtClock, colorFromString, msgTypeLabel, initials, extractContacts } from '../lib/format.js';
 import MediaContent from './MediaContent.jsx';
 
@@ -60,7 +60,16 @@ function BodyText({ text, mentions }) {
 // Burbuja de mensaje — Diseño A (estilo WhatsApp).
 // Entrantes: blancas con sombra sutil. Salientes: verde #DCFCE7.
 // En grupos: avatar del autor (solo primera burbuja consecutiva) + nombre coloreado.
-export default function MessageBubble({ msg, isGroup, showAuthor, onRetry, onDiscard, onForward, onReply, onDeleteForEveryone, selectMode, selected, onToggleSelect, quotedMsg, mentions }) {
+// WhatsApp deja editar los mensajes propios hasta 15 minutos después de enviarlos.
+// El botón aparece solo dentro de esa ventana: ofrecerlo después sería prometer algo
+// que el servidor va a rechazar.
+const VENTANA_EDICION_MIN = 15;
+const dentroDeVentana = (msg) => {
+  const t = new Date(msg.wa_timestamp || msg.created_at || 0).getTime();
+  return t > 0 && (Date.now() - t) / 60000 < VENTANA_EDICION_MIN;
+};
+
+export default function MessageBubble({ msg, isGroup, showAuthor, onRetry, onDiscard, onForward, onReply, onDeleteForEveryone, onEdit, selectMode, selected, onToggleSelect, quotedMsg, mentions }) {
   const out = msg.direction === 'out';
   const deleted = !!msg.deleted_at;
   const isMedia = !deleted && MEDIA_TYPES.has(msg.msg_type);
@@ -79,8 +88,16 @@ export default function MessageBubble({ msg, isGroup, showAuthor, onRetry, onDis
   const canReply = onReply && actionable;
   // Eliminar "para todos": solo mensajes propios (salientes).
   const canDelete = onDeleteForEveryone && actionable && out;
-  const actions = (canForward || canReply || canDelete) ? (
+  // Editar: propio, de texto, y dentro de los 15 minutos que permite WhatsApp.
+  const canEdit = onEdit && actionable && out && !isMedia && !isContact && !!msg.body && dentroDeVentana(msg);
+  const actions = (canForward || canReply || canDelete || canEdit) ? (
     <div className="self-center flex items-center gap-1 opacity-0 group-hover:opacity-100 max-md:opacity-70 transition-opacity duration-150 shrink-0">
+      {canEdit && (
+        <button onClick={() => onEdit(msg)} title="Editar este mensaje (WhatsApp lo permite hasta 15 minutos después de enviarlo)"
+                className="w-7 h-7 rounded-full bg-white/90 border border-border text-text3 hover:text-[#2E69E0] hover:border-[#C7D2FE] flex items-center justify-center cursor-pointer">
+          <Pencil size={13} />
+        </button>
+      )}
       {canReply && (
         <button onClick={() => onReply(msg)} title="Responder a este mensaje"
                 className="w-7 h-7 rounded-full bg-white/90 border border-border text-text3 hover:text-[#B45309] hover:border-[#F5D9A8] flex items-center justify-center cursor-pointer">
@@ -150,6 +167,14 @@ export default function MessageBubble({ msg, isGroup, showAuthor, onRetry, onDis
       )}
 
       <div className="flex items-center justify-end gap-1 mt-0.5">
+        {/* "editado", igual que WhatsApp. Con el texto original en el tooltip: si
+            alguien discute qué se le dijo al cliente, está a un hover. */}
+        {msg.edited_at && !deleted && (
+          <span className={`text-[9.5px] italic ${out ? 'text-[#7A9484]' : 'text-text3'}`}
+                title={msg.body_original ? `Antes decía: ${msg.body_original}` : 'Este mensaje se editó'}>
+            editado
+          </span>
+        )}
         <span className={`text-[9.5px] ${out && !failed ? 'text-[#7A9484]' : 'text-text3'}`}>
           {fmtClock(msg.wa_timestamp || msg.created_at)}
         </span>

@@ -93,8 +93,27 @@ export default function InicioScreen() {
       {/* Servicio: días que le quedan + días que el trabajo está frenado por su parte.
           Si el proyecto está en pausa no se muestra ninguno de los dos: los relojes
           están congelados, así que un contador ahí sería mentira. */}
-      {(serv.pausado || serv.diasRestantes != null || (serv.diasAtraso ?? 0) > 0) && (
+      {(serv.pausado || serv.diasRestantes != null || (serv.diasAtraso ?? 0) > 0 || serv.funnels) && (
         <div style={{ padding: '14px 22px 0', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {/* Embudos contratados vs entregados. Solo aparece si el equipo cargó cuántos
+              contrató: sin ese número, un "0 de 0" no dice nada. Se muestra un chip por
+              tipo, y solo de los que contrató algo. */}
+          {serv.funnels && [
+            { label: 'Producto', pagados: serv.funnels.productoContratados, hechos: serv.funnels.productoEntregados },
+            { label: 'Reclutamiento', pagados: serv.funnels.reclutamientoContratados, hechos: serv.funnels.reclutamientoEntregados },
+          ].filter(f => (f.pagados ?? 0) > 0).map((f) => {
+            const completo = (f.hechos ?? 0) >= f.pagados;
+            const c = completo ? ['var(--mk-green-bg)', 'var(--mk-green)'] : ['var(--mk-blue-bg, #EEF3FF)', 'var(--mk-blue-ops, #1D4FD8)'];
+            return (
+              <span key={f.label} style={servPill(c[0], c[1])}
+                title={completo
+                  ? `Ya te entregamos los ${f.pagados} embudos de ${f.label.toLowerCase()} que contrataste.`
+                  : `Contrataste ${f.pagados} embudos de ${f.label.toLowerCase()}. Van ${f.hechos ?? 0}.`}>
+                <IcoInfo size={13} stroke="currentColor" sw={2.3} />
+                {f.label} {f.hechos ?? 0} de {f.pagados}
+              </span>
+            );
+          })}
           {serv.pausado && (
             <span style={servPill('var(--mk-bg2, #F4F5F7)', 'var(--mk-text2, #6B7280)')}
               title="El proyecto está en pausa. Mientras tanto no corren los días de servicio ni los de espera.">

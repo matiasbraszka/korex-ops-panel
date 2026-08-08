@@ -77,6 +77,20 @@ export async function fetchMessages(convId, { before = null, after = null } = {}
   return Array.isArray(rows) ? rows.reverse() : []; // ASC para render
 }
 
+// Mensajes puntuales por su id de WhatsApp. Sirve para resolver la burbuja citada
+// cuando el mensaje al que se responde quedo fuera de la pagina cargada: el hilo
+// trae de a 50, y una respuesta a algo de hace tres dias dejaba la cita en blanco.
+export async function fetchMessagesByWaId(waIds) {
+  const ids = [...new Set((waIds || []).filter(Boolean))].slice(0, 50);
+  if (!ids.length) return [];
+  const lista = ids.map((s) => `"${String(s).replace(/"/g, '')}"`).join(',');
+  const rows = await sbFetch(
+    `wa_messages?wa_message_id=in.(${encodeURIComponent(lista)})&select=id,wa_message_id,direction,body,msg_type,sender_jid,payload,deleted_at`,
+    { headers: { Prefer: 'return=representation' } },
+  );
+  return Array.isArray(rows) ? rows : [];
+}
+
 // Campos de IDENTIDAD: a quien pertenece la conversacion. Si una persona los
 // toca, la cascada automatica (edge wa-clasificar-clientes) no vuelve a pisarlos
 // nunca mas. Es el candado del principio P2.
@@ -391,6 +405,27 @@ export async function invokeDeleteForEveryone(messageId) {
   if (error) throw error;
   if (data?.error) throw new Error(data.error);
   return data; // { ok }
+}
+
+// Editar un mensaje ya enviado (el "editar" de WhatsApp). El servidor valida la
+// ventana de 15 minutos y devuelve un error entendible si ya pasó.
+export async function invokeEdit(messageId, text) {
+  const { data, error } = await supabase.functions.invoke('whatsapp-edit', {
+    body: { message_id: messageId, text },
+  });
+  if (error) throw error;
+  if (data?.error) {
+    const legibles = {
+      ventana_vencida: 'WhatsApp solo deja editar hasta 15 minutos después de enviar. Este ya pasó ese rato.',
+      not_own_message: 'Solo se pueden editar los mensajes que enviamos nosotros.',
+      not_text: 'Por ahora solo se pueden editar mensajes de texto.',
+      already_deleted: 'Este mensaje ya está eliminado.',
+      evolution_error: 'WhatsApp no aceptó la edición. Probablemente ya pasó la ventana.',
+      evolution_unreachable: 'No pude hablar con WhatsApp. Probá de nuevo en un momento.',
+    };
+    throw new Error(legibles[data.error] || data.error);
+  }
+  return data; // { ok, text }
 }
 
 export async function invokeMedia(messageId) {

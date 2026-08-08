@@ -5,7 +5,7 @@ import {
   fetchConversations, fetchMessages, patchConversation, fetchSoporteConfig,
   patchSoporteConfig, fetchAppointments, fetchParticipants, fetchGroupNames,
   invokeSend, invokeCita, invokeMedia, invokeGroup, invokeLink,
-  invokeAgendar, invokeDeleteForEveryone, fetchAllAssignees, PAGE_SIZE,
+  invokeAgendar, invokeDeleteForEveryone, invokeEdit, fetchAllAssignees, PAGE_SIZE,
   fetchMentionState,
 } from '../lib/api.js';
 import { fmtNextCita } from '../lib/format.js';
@@ -448,6 +448,21 @@ export function SoporteProvider({ children }) {
     });
   }, []);
 
+  // Edita un mensaje ya enviado. Primero manda a WhatsApp y recién después toca el
+  // hilo: si el servidor rechaza (pasaron los 15 minutos), no queremos mostrar en el
+  // panel un texto que en el teléfono del cliente nunca cambió.
+  const editMessage = useCallback(async (convId, messageId, text) => {
+    await invokeEdit(messageId, text);
+    setThreads((prev) => {
+      const cur = prev[convId];
+      if (!cur) return prev;
+      const items = cur.items.map((m) => (m.id === messageId
+        ? { ...m, body: text, edited_at: new Date().toISOString(), body_original: m.body_original ?? m.body }
+        : m));
+      return { ...prev, [convId]: { ...cur, items } };
+    });
+  }, []);
+
   const saveTagsCatalog = useCallback(async (tags) => {
     setConfig((prev) => ({ ...prev, tags }));
     await patchSoporteConfig({ tags });
@@ -737,7 +752,7 @@ export function SoporteProvider({ children }) {
     supportNumber: config.support_number || '',
     waLinks: config.wa_links || [],
     saveTagsCatalog, saveTemplates, saveAvailability, saveRecursos, saveSupportNumber, saveWaLinks,
-    updateConversation, updateNotes, linkContact, linkByFinance, agendarContact, deleteForEveryone,
+    updateConversation, updateNotes, linkContact, linkByFinance, agendarContact, deleteForEveryone, editMessage,
     updateConvAssignees,
     appointmentsByConv, loadAppointments, createAppointment, cancelAppointment, rescheduleAppointment,
     groupDirByConv, loadGroupDirectory,
@@ -751,7 +766,7 @@ export function SoporteProvider({ children }) {
     selectedConversation, selectConversation, filters, tagCounts, linkedClients, assigneeCounts, threads, loadOlder,
     sendMessage, sendAttachment, retrySend, discardFailed, forwardMessage, config,
     saveTagsCatalog, saveTemplates, saveAvailability, saveRecursos, saveSupportNumber, saveWaLinks,
-    updateConversation, updateNotes, linkContact, linkByFinance, agendarContact, deleteForEveryone,
+    updateConversation, updateNotes, linkContact, linkByFinance, agendarContact, deleteForEveryone, editMessage,
     updateConvAssignees, appointmentsByConv,
     loadAppointments, createAppointment, cancelAppointment, rescheduleAppointment,
     groupDirByConv, loadGroupDirectory,
