@@ -952,10 +952,16 @@ Quedo a la espera de tu respuesta`;
                 <div key={v} className="flex flex-col gap-1.5">
                   {multiV && <div className="text-[10px] font-extrabold uppercase tracking-[0.08em] text-[#9098A4] px-1 pt-0.5">Versión {v}</div>}
                   {AD_BUCKETS.map(b => (
-                    <FunnelResourceFolder key={b.key} strategyId={f.strategy_id} clientId={clientId} avatarId={av.id}
-                      bucketKey={b.key} version={v} label={b.label} color={b.c} bg={b.bg} by={meId} voomly={!!b.voomly}
-                      moveTargets={moveTargets} selfId={`f:${av.id}:${v}:${b.key}`} reloadTick={clientResTick} onMoved={() => setClientResTick(t => t + 1)}
-                      extra={b.voomly ? <span className="text-[9.5px] font-bold py-0.5 px-1.5 rounded-full" style={{ background: '#FDF2F8', color: '#DB2777' }}>Voomly</span> : null} />
+                    // data-res solo en el PRIMER avatar y su primera versión: es adonde
+                    // apunta el salto del Panorama ("Anuncios"). Los anuncios son por
+                    // avatar, así que no hay una única carpeta; se lleva a la primera y
+                    // desde ahí se ve el resto.
+                    <div key={b.key} {...(i === 0 && v === recVers[0] ? { 'data-res': b.key } : {})} className="rounded-lg">
+                      <FunnelResourceFolder strategyId={f.strategy_id} clientId={clientId} avatarId={av.id}
+                        bucketKey={b.key} version={v} label={b.label} color={b.c} bg={b.bg} by={meId} voomly={!!b.voomly}
+                        moveTargets={moveTargets} selfId={`f:${av.id}:${v}:${b.key}`} reloadTick={clientResTick} onMoved={() => setClientResTick(t => t + 1)}
+                        extra={b.voomly ? <span className="text-[9.5px] font-bold py-0.5 px-1.5 rounded-full" style={{ background: '#FDF2F8', color: '#DB2777' }}>Voomly</span> : null} />
+                    </div>
                   ))}
                 </div>
               ))}

@@ -36,12 +36,20 @@ function CellDot({ ok }) {
 }
 
 // Chip de conteo compacto (por funnel): verde con el número si hay ≥1, rojo ✗ si no hay.
-function CellCount({ n }) {
+// Con `objetivo` muestra "3/15" y se pone ámbar mientras no se llegue: es lo que el
+// equipo se comprometió a entregar (strategy_pages.ads_target), no un simple conteo.
+function CellCount({ n, que = 'testimonio', objetivo = null }) {
   const ok = n > 0;
+  const completo = objetivo ? n >= objetivo : ok;
+  const tono = !ok ? { background: '#FDECEC', color: '#DC2626' }
+    : completo ? { background: '#E6F7EE', color: '#15803D' }
+    : { background: '#FFFBEB', color: '#B45309' };
+  const titulo = !ok ? `sin ${que}s`
+    : objetivo ? `${n} de ${objetivo} ${que}s entregados`
+    : `${n} ${que}${n === 1 ? '' : 's'}`;
   return (
-    <span title={ok ? `${n} testimonio(s)` : 'sin testimonios'} className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold shrink-0"
-      style={ok ? { background: '#E6F7EE', color: '#15803D' } : { background: '#FDECEC', color: '#DC2626' }}>
-      {ok ? n : <X size={11} strokeWidth={3} />}
+    <span title={titulo} className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold shrink-0" style={tono}>
+      {ok ? (objetivo ? `${n}/${objetivo}` : n) : <X size={11} strokeWidth={3} />}
     </span>
   );
 }
@@ -246,7 +254,7 @@ export default function PanoramaRecursos() {
 
       {/* Tabla */}
       <div className="border border-[#E7EAF0] rounded-xl overflow-x-auto bg-white">
-        <table className="w-full border-collapse min-w-[1180px]">
+        <table className="w-full border-collapse min-w-[1280px]">
           <thead>
             <tr className="bg-[#F8FAFD]">
               <th className={th}>Cliente · Nicho · Recursos</th>
@@ -254,6 +262,7 @@ export default function PanoramaRecursos() {
               <th className={th}>Avatar</th>
               <th className={th}>VSL guión</th>
               <th className={th}>VSL editado</th>
+              <th className={th}>Anuncios</th>
               <th className={th}>Testimonios</th>
               <th className={th}>Tracking</th>
               <th className={th}>Funnels · creado</th>
@@ -268,7 +277,7 @@ export default function PanoramaRecursos() {
                 return (
                   <tr key={r.client_id} className="hover:bg-[#FBFCFE]">
                     <ClienteCell r={r} rowSpan={1} onGoCuenta={primerFunnelId(r) ? () => irA(r.client_id, primerFunnelId(r), 'cuentas') : null} onGoCrm={() => abrirAccesos(r.client_id)} />
-                    <td className={tdBase} style={cellStyle(true)} colSpan={8}>
+                    <td className={tdBase} style={cellStyle(true)} colSpan={9}>
                       <span className="text-[11.5px] text-[#C2C7D0]">— sin funnel creado —</span>
                     </td>
                   </tr>
@@ -336,6 +345,20 @@ export default function PanoramaRecursos() {
                             );
                           })}</div>}
                     </td>
+                    {/* Anuncios editados — por funnel. Clic → la carpeta de anuncios
+                        editados. Si el funnel tiene cargado cuántos se prometieron
+                        ("Anuncios a entregar", en el Portal del cliente), muestra 3/15. */}
+                    <td className={tdBase} style={st}>
+                      {e.n_funnels === 0 ? <span className="text-[11px] text-[#C2C7D0]">—</span>
+                        : <div className="flex flex-col gap-1">{(e.funnels || []).map((f, j) => (
+                            <div key={j} className="h-[18px] flex items-center">
+                              <button onClick={() => irA(r.client_id, f.id, 'ad_edit', 'recursos')}
+                                title={f.ads_editado ? 'Ver la carpeta de anuncios editados' : 'Faltan los anuncios editados · clic para ir a cargarlos'}
+                                className="inline-flex items-center border-none bg-transparent p-0 cursor-pointer hover:opacity-80">
+                                <CellCount n={f.ads_entregados || 0} que="anuncio editado" objetivo={f.ads_target || null} />
+                              </button>
+                            </div>))}</div>}
+                    </td>
                     {/* Testimonios — por funnel. Clic → su carpeta de testimonios. */}
                     <td className={tdBase} style={st}>
                       {e.n_funnels === 0 ? <span className="text-[11px] text-[#C2C7D0]">—</span>
@@ -382,7 +405,7 @@ export default function PanoramaRecursos() {
               });
             })}
             {filtered.length === 0 && (
-              <tr><td colSpan={9} className="text-center text-[12.5px] text-[#9098A4] py-8">Sin clientes que mostrar.</td></tr>
+              <tr><td colSpan={10} className="text-center text-[12.5px] text-[#9098A4] py-8">Sin clientes que mostrar.</td></tr>
             )}
           </tbody>
         </table>
@@ -392,7 +415,7 @@ export default function PanoramaRecursos() {
         <span className="inline-flex items-center gap-1"><Check size={12} className="text-[#15803D]" strokeWidth={3} />Está</span>
         <span className="inline-flex items-center gap-1"><X size={12} className="text-[#DC2626]" strokeWidth={3} />Falta</span>
         <span className="inline-flex items-center gap-1"><Link2 size={12} className="text-[#15803D]" />DEL vinculado = detectado y leído por el cerebro.</span>
-        <span className="inline-flex items-center gap-1"><b>Avatar</b> = avatar cargado en el DEL · <b>VSL guión</b> = guión escrito en el DEL · <b>VSL editado</b> = video listo · <b>Testimonios</b> = videos cargados en la carpeta del funnel · <b>Tracking</b> P/C/E = Pixel / Clarity / Eventos.</span>
+        <span className="inline-flex items-center gap-1"><b>Avatar</b> = avatar cargado en el DEL · <b>VSL guión</b> = guión escrito en el DEL · <b>VSL editado</b> = video listo · <b>Anuncios</b> = anuncios editados en la carpeta del funnel (si el funnel tiene cargado cuántos se prometieron, muestra <b>3/15</b> y queda en ámbar hasta llegar) · <b>Testimonios</b> = videos cargados en la carpeta del funnel · <b>Tracking</b> P/C/E = Pixel / Clarity / Eventos.</span>
         <span className="inline-flex items-center gap-1"><Layers size={12} />Logo/colores/imágenes son del cliente (una vez); Avatar/VSL/Testimonios/Tracking/fecha son por FUNNEL, alineados con cada funnel de la columna. Los checks leen el sistema nuevo (DEL nativo + carpetas del funnel).</span>
         <span className="inline-flex items-center gap-1"><KeyRound size={12} /><b>CRM prod</b> = acceso al CRM Korex de producción cargado en los accesos del cliente (aplica a todos sus funnels); clic para verlo o cargarlo.</span>
         <span className="inline-flex items-center gap-1"><b>Todo el tablero es clicable</b>: cada punto lleva al lugar exacto dentro del panel (la pestaña del DEL o la carpeta) y lo destaca en amarillo. Volvés con “← Volver al Panorama”. Lo único que sale del panel es la flechita <ExternalLink size={10} className="inline" /> del VSL editado, que abre Voomly.</span>

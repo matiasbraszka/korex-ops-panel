@@ -8,14 +8,20 @@ import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import * as tus from 'tus-js-client';
 import { supabase, sbFetch } from '@korex/db';
-import { FolderOpen, ChevronRight, Plus, Trash2, Play, Image as ImageIcon, Loader2, Pencil, ClipboardList, Check, Share2, Copy, X } from 'lucide-react';
+import { FolderOpen, ChevronRight, Plus, Trash2, Play, Image as ImageIcon, Loader2, Pencil, ClipboardList, Check, Share2, Copy, X, Star, Download, Maximize2, Search } from 'lucide-react';
 import ResourceLightbox from './ResourceLightbox';
 import BrandingGenerator from './BrandingGenerator';
+import { descargarLote } from './descargarLote';
 import { copyText } from '../recursosShared';
 import { ordenarVoomlyPorCliente } from '../voomlyMatch';
 import { publicOrigin } from '../../../utils/helpers';
 
 const BUCKET = 'funnel-recursos';
+// Orden de la carpeta: destacadas del equipo → favorita del cliente → por título.
+const ordenCarpeta = (a, b) =>
+  (b.destacada ? 1 : 0) - (a.destacada ? 1 : 0)
+  || (b.favorita ? 1 : 0) - (a.favorita ? 1 : 0)
+  || (a.title || '').localeCompare(b.title || '', 'es', { numeric: true, sensitivity: 'base' });
 const kindOf = (mime) => (mime || '').startsWith('image/') ? 'image' : (mime || '').startsWith('video/') ? 'video' : 'other';
 const safeName = (s) => String(s || 'archivo').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 80);
 
@@ -51,7 +57,7 @@ function fondoMiniatura(r) {
 }
 
 const VOOMLY_URL = 'https://app.voomly.com/';   // dashboard de Voombly (buscar el VSL y copiar su link)
-function Tile({ r, voomly = false, onVoomly, onOpenVoombly, onBuscarVoomly, selected, onToggleSelect, onDelete, onRename, onOpen, resolveDragIds, publicable = false, onVisibleCliente }) {
+function Tile({ r, voomly = false, onVoomly, onOpenVoombly, onBuscarVoomly, selected, onToggleSelect, onDelete, onRename, onOpen, resolveDragIds, publicable = false, onVisibleCliente, onDestacar }) {
   const [failed, setFailed] = useState(false);
   const [editing, setEditing] = useState(false);
   const [voomEdit, setVoomEdit] = useState(false);
@@ -129,6 +135,19 @@ function Tile({ r, voomly = false, onVoomly, onOpenVoombly, onBuscarVoomly, sele
           <span title="Favorita del cliente: la eligió para su página" className="absolute top-1 left-1 inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[9px] font-extrabold pointer-events-none" style={{ background: '#F4B942', color: '#0B1526', boxShadow: '0 2px 8px rgba(0,0,0,.25)' }}>★ FAVORITA</span>
         )}
       </button>
+      {/* Destacar: la marca el EQUIPO para que suba al principio de la carpeta. Es otra
+          cosa que `favorita`, que es la única que elige el cliente desde su portal.
+          Va fuera del botón de la miniatura para no abrir el visor al marcarla. */}
+      {onDestacar && (
+        <button onClick={(e) => { e.stopPropagation(); onDestacar(r); }}
+          title={r.destacada ? 'Destacada: aparece primero en la carpeta (clic para quitarla)' : 'Destacar: que aparezca primero en la carpeta'}
+          className={`absolute top-7 right-1 w-6 h-6 inline-flex items-center justify-center rounded-full border-none cursor-pointer transition-opacity ${r.destacada ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
+          style={r.destacada
+            ? { background: '#2E69E0', color: '#fff', boxShadow: '0 2px 8px rgba(0,0,0,.25)' }
+            : { background: 'rgba(255,255,255,.92)', color: '#9098A4', boxShadow: '0 1px 4px rgba(0,0,0,.18)' }}>
+          <Star size={12} fill={r.destacada ? 'currentColor' : 'none'} />
+        </button>
+      )}
       {/* Acciones ABAJO: elegir (para mover en masa) + borrar */}
       <div className="flex items-center gap-1 px-1.5 py-1.5 border-t border-[#F1F3F7]">
         <label onClick={(e) => e.stopPropagation()} className="flex items-center gap-1 cursor-pointer select-none" title="Tildá para seleccionar y mover varias juntas">
@@ -190,6 +209,10 @@ export default function FunnelResourceFolder({ strategyId, clientId, avatarId, b
   const [pickerFor, setPickerFor] = useState(null);    // testimonio (fila) para el que se abrio el picker de Voomly
   const [pickerRows, setPickerRows] = useState(null);  // videos de Voomly del kind (ej. Testimonio)
   const [pickerQ, setPickerQ] = useState('');
+  const [bajando, setBajando] = useState(null);   // progreso de la descarga en masa
+  const [borrando, setBorrando] = useState(null); // borrado en masa en curso
+  const [full, setFull] = useState(false);        // carpeta abierta a pantalla completa
+  const [buscar, setBuscar] = useState('');       // filtro por título en la vista completa
   const fileRef = useRef(null);
   const shareBtnRef = useRef(null);
 
@@ -301,12 +324,13 @@ export default function FunnelResourceFolder({ strategyId, clientId, avatarId, b
 
   const cargar = async () => {
     try {
-      const q = `funnel_resources?select=id,title,public_url,storage_path,kind,mime_type,size_bytes,created_at,provider,bunny_id,transcript,voomly_url,visible_cliente,favorita,meta&${scopeFilter}&bucket_key=eq.${encodeURIComponent(bucketKey)}&order=created_at.desc`;
+      const q = `funnel_resources?select=id,title,public_url,storage_path,kind,mime_type,size_bytes,created_at,provider,bunny_id,transcript,voomly_url,visible_cliente,favorita,destacada,meta&${scopeFilter}&bucket_key=eq.${encodeURIComponent(bucketKey)}&order=created_at.desc`;
       const rows = await sbFetch(q);
-      // Orden natural por título: "VSL P01…P10", "AD1…AD10", "G1…G10" quedan en secuencia
-      // (localeCompare con numeric respeta los números dentro del texto).
+      // Primero lo destacado por el equipo, después la favorita que eligió el cliente,
+      // y recién ahí el orden natural por título: "VSL P01…P10", "AD1…AD10", "G1…G10"
+      // quedan en secuencia (localeCompare con numeric respeta los números del texto).
       const arr = Array.isArray(rows) ? [...rows] : [];
-      arr.sort((a, b) => (a.title || '').localeCompare(b.title || '', 'es', { numeric: true, sensitivity: 'base' }));
+      arr.sort(ordenCarpeta);
       setItems(arr);
     } catch { setItems([]); }
     setSelected(new Set());
@@ -433,6 +457,84 @@ export default function FunnelResourceFolder({ strategyId, clientId, avatarId, b
     } catch { /* que no rompa el borrado */ }
   };
 
+  // Borrado en masa. Replica exactamente lo que hace `borrar()` para uno solo, en el
+  // mismo orden: primero los archivos donde estén (Supabase o Bunny) y recién después
+  // la fila. Si se borrara la fila primero y algo fallara, el archivo quedaría en el
+  // servidor sin nadie que lo referencie: ocupando lugar y sin forma de encontrarlo.
+  //
+  // OJO: `funnel_resources` NO tiene papelera (los triggers de papelera_borrados solo
+  // cubren client_brain_docs y del_sections). Esto no se puede deshacer.
+  const borrarSeleccion = async () => {
+    const elegidos = (items || []).filter(r => selected.has(r.id));
+    if (!elegidos.length) return;
+    // Un logo generado son 3 archivos que van juntos: si se borra uno, van los tres.
+    const gids = new Set(elegidos.map(r => r.meta?.group_id).filter(Boolean));
+    const grupo = (items || []).filter(r => selected.has(r.id) || (r.meta?.group_id && gids.has(r.meta.group_id)));
+    const extra = grupo.length - elegidos.length;
+
+    const texto = window.prompt(
+      `Vas a borrar ${grupo.length} recurso${grupo.length === 1 ? '' : 's'} de “${label}”`
+      + (extra > 0 ? `\n(${extra} más porque son versiones del mismo logo y van juntas)` : '')
+      + `\n\nEsto NO se puede deshacer: los archivos se borran del servidor.`
+      + `\n\nEscribí BORRAR para confirmar:`);
+    if ((texto || '').trim().toUpperCase() !== 'BORRAR') return;
+
+    const ids = grupo.map(r => r.id);
+    setItems(prev => (prev || []).filter(x => !ids.includes(x.id)));
+    setSelected(new Set());
+    setBorrando({ total: grupo.length });
+
+    try {
+      const paths = grupo.filter(x => x.provider !== 'bunny' && x.storage_path).map(x => x.storage_path);
+      if (paths.length) await supabase.storage.from(BUCKET).remove(paths).catch(() => {});
+      // bunny-video borra de a un video por llamada (supabase/functions/bunny-video/index.ts:78).
+      for (const x of grupo.filter(x => x.provider === 'bunny' && x.bunny_id)) {
+        await supabase.functions.invoke('bunny-video', { body: { action: 'delete', videoId: x.bunny_id } }).catch(() => {});
+      }
+      const { error } = await supabase.from('funnel_resources').delete().in('id', ids);
+      if (error) { window.alert('Borré los archivos pero no pude limpiar la lista: ' + error.message); cargar(); }
+      if (bucketKey === 'branding' && clientScope) await revisarPaletaUnica();
+    } finally {
+      setBorrando(null);
+    }
+  };
+
+  // Descarga en masa: zip para lo liviano, videos de a uno. Ver descargarLote.js.
+  const descargarSeleccion = async () => {
+    const elegidos = (items || []).filter(r => selected.has(r.id));
+    if (!elegidos.length) return;
+    const ctrl = new AbortController();
+    setBajando({ ctrl, fase: 'zip', hechos: 0, total: elegidos.length, actual: '' });
+    try {
+      const res = await descargarLote(elegidos, {
+        nombreZip: `${safeName(label)}.zip`,
+        señal: ctrl.signal,
+        onPaso: (p) => setBajando(b => (b ? { ...b, ...p } : b)),
+      });
+      if (res.fallados?.length) {
+        window.alert(`Bajé lo que pude. Estos ${res.fallados.length} fallaron:\n\n${res.fallados.slice(0, 12).join('\n')}`);
+      }
+    } catch (e) {
+      window.alert('No pude completar la descarga: ' + (e?.message || e));
+    } finally {
+      setBajando(null);
+    }
+  };
+
+  // Destacar / quitar destacado (una o varias). Es del EQUIPO, no del cliente.
+  const destacar = async (r) => {
+    const next = !r.destacada;
+    setItems(prev => (prev || []).map(x => x.id === r.id ? { ...x, destacada: next } : x).sort(ordenCarpeta));
+    await supabase.from('funnel_resources').update({ destacada: next }).eq('id', r.id);
+  };
+  const destacarSeleccion = async (valor) => {
+    const ids = Array.from(selected);
+    if (!ids.length) return;
+    setItems(prev => (prev || []).map(x => ids.includes(x.id) ? { ...x, destacada: valor } : x).sort(ordenCarpeta));
+    setSelected(new Set());
+    await supabase.from('funnel_resources').update({ destacada: valor }).in('id', ids);
+  };
+
   const renombrar = async (r, title) => {
     setItems((prev) => (prev || []).map(x => x.id === r.id ? { ...x, title } : x));
     await supabase.from('funnel_resources').update({ title }).eq('id', r.id);
@@ -492,7 +594,23 @@ export default function FunnelResourceFolder({ strategyId, clientId, avatarId, b
     if (e.dataTransfer?.files?.length) { setOpen(true); subir(e.dataTransfer.files); }
   };
 
+  // Esc cierra la carpeta completa (y solo ella: si hay un visor abierto encima, ese
+  // se cierra primero con su propio Esc).
+  useEffect(() => {
+    if (!full) return undefined;
+    const onKey = (e) => { if (e.key === 'Escape' && !preview) setFull(false); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [full, preview]);
+
   const n = items?.length ?? 0;
+  // Lo que se ve en la carpeta completa: todo, filtrado por el buscador.
+  const visibles = (() => {
+    const t = buscar.trim().toLowerCase();
+    const arr = items || [];
+    return t ? arr.filter(r => String(r.title || '').toLowerCase().includes(t)) : arr;
+  })();
+
   return (
     <div className="rounded-lg border relative" onDragOver={onDragOver} onDragLeave={onDragLeave} onDrop={onDrop}
       style={{ borderColor: resOver ? color : (open ? (color + '55') : '#EDF0F5'), background: open ? bg : '#FBFCFE' }}>
@@ -588,8 +706,42 @@ export default function FunnelResourceFolder({ strategyId, clientId, avatarId, b
                   {copied ? 'Copiado' : 'Copiar transcripciones'}
                 </button>
               )}
+              {/* Bajarse todo lo elegido: zip para lo liviano, videos de a uno. */}
+              <button onClick={descargarSeleccion} disabled={!!bajando}
+                className="flex items-center gap-1.5 text-[11px] font-bold rounded-md px-2.5 py-1.5 cursor-pointer border bg-white disabled:opacity-60"
+                style={{ color, borderColor: `${color}55` }}>
+                <Download size={13} />Descargar
+              </button>
+              {/* Destacar en masa: si ya están todas destacadas, el botón las quita. */}
+              {(() => {
+                const elegidas = (items || []).filter(r => selected.has(r.id));
+                const todasDest = elegidas.length > 0 && elegidas.every(r => r.destacada);
+                return (
+                  <button onClick={() => destacarSeleccion(!todasDest)}
+                    className="flex items-center gap-1.5 text-[11px] font-bold rounded-md px-2.5 py-1.5 cursor-pointer border bg-white"
+                    style={{ color: '#2E69E0', borderColor: '#C7D2FE' }}>
+                    <Star size={13} fill={todasDest ? 'currentColor' : 'none'} />{todasDest ? 'Quitar destacado' : 'Destacar'}
+                  </button>
+                );
+              })()}
+              <button onClick={borrarSeleccion} disabled={!!borrando}
+                className="flex items-center gap-1.5 text-[11px] font-bold rounded-md px-2.5 py-1.5 cursor-pointer border bg-white text-[#DC2626] border-[#F5C2C2] hover:bg-[#FEF2F2] disabled:opacity-60">
+                {borrando ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}Borrar
+              </button>
               <button onClick={() => setSelected(new Set())} className="text-[11px] font-semibold text-[#9098A4] hover:text-[#6B7280] border-none bg-transparent cursor-pointer">Quitar selección</button>
               <span className="text-[10.5px] text-[#AEB4BF] ml-auto hidden sm:inline">…o arrastralas a otra carpeta</span>
+            </div>
+          )}
+          {/* Progreso de la descarga en masa, con cancelar. */}
+          {bajando && (
+            <div className="flex items-center gap-2 flex-wrap mb-2 py-2 px-2.5 rounded-lg bg-white" style={{ border: `1px solid ${color}44` }}>
+              <Loader2 size={13} className="animate-spin shrink-0" style={{ color }} />
+              <span className="text-[11.5px] font-semibold" style={{ color }}>
+                {bajando.fase === 'zip' ? 'Armando el zip' : bajando.fase === 'video' ? 'Bajando videos' : 'Listo'}
+                {' · '}{bajando.hechos} de {bajando.total}
+              </span>
+              {bajando.actual && <span className="text-[10.5px] text-[#9098A4] truncate max-w-[220px]">{bajando.actual}</span>}
+              <button onClick={() => bajando.ctrl?.abort()} className="ml-auto text-[11px] font-semibold text-[#9098A4] hover:text-[#DC2626] border-none bg-transparent cursor-pointer">Cancelar</button>
             </div>
           )}
           <div className={`rounded-lg transition-colors ${dragOver ? 'ring-2 ring-dashed' : ''}`} style={dragOver ? { outline: `2px dashed ${color}`, outlineOffset: 2 } : undefined}>
@@ -610,20 +762,32 @@ export default function FunnelResourceFolder({ strategyId, clientId, avatarId, b
             )}
             {n > 0 && (
               <div className="grid gap-2 mb-2" style={{ gridTemplateColumns: 'repeat(auto-fill,minmax(110px,1fr))' }}>
-                {items.slice(0, visible).map(r => <Tile key={r.id} r={r} voomly={voomly} onOpenVoombly={onOpenVoombly} onBuscarVoomly={voomlyKind ? abrirPickerVoomly : undefined} selected={selected.has(r.id)} onToggleSelect={toggleSel} onDelete={borrar} onRename={renombrar} onOpen={setPreview} onVoomly={guardarVoomly} resolveDragIds={resolveDragIds} publicable={bucketKey === 'ad_edit' || bucketKey === 'vsl_edit'} onVisibleCliente={toggleVisibleCliente} />)}
+                {items.slice(0, visible).map(r => <Tile key={r.id} r={r} voomly={voomly} onOpenVoombly={onOpenVoombly} onBuscarVoomly={voomlyKind ? abrirPickerVoomly : undefined} selected={selected.has(r.id)} onToggleSelect={toggleSel} onDelete={borrar} onRename={renombrar} onOpen={setPreview} onVoomly={guardarVoomly} resolveDragIds={resolveDragIds} publicable={bucketKey === 'ad_edit' || bucketKey === 'vsl_edit'} onVisibleCliente={toggleVisibleCliente} onDestacar={destacar} />)}
               </div>
             )}
-            {/* Paginado: mostramos de a 10 para que la carpeta abra fluida aunque tenga cientos. */}
+            {/* Paginado: mostramos de a 10 para que la carpeta abra fluida aunque tenga cientos.
+                Con muchos, en vez de apretar "cargar más" diez veces conviene abrirla entera. */}
             {n > visible && (
-              <div className="flex items-center justify-center gap-2 mb-2">
+              <div className="flex items-center justify-center gap-2 mb-2 flex-wrap">
                 <button onClick={() => setVisible(v => v + 10)}
                   className="inline-flex items-center gap-1.5 py-1.5 px-3.5 rounded-lg border text-[11.5px] font-semibold cursor-pointer bg-white hover:bg-[#F7F9FC]"
                   style={{ borderColor: color + '55', color }}>
                   Cargar más <span className="opacity-70">({Math.min(10, n - visible)} de {n - visible} restantes)</span>
                 </button>
-                {n - visible > 10 && (
-                  <button onClick={() => setVisible(n)} className="text-[11px] font-semibold text-[#9098A4] hover:text-[#6B7280] border-none bg-transparent cursor-pointer">Ver todos</button>
-                )}
+                <button onClick={() => setFull(true)}
+                  className="inline-flex items-center gap-1.5 py-1.5 px-3.5 rounded-lg border-none text-[11.5px] font-semibold cursor-pointer text-white"
+                  style={{ background: color }}>
+                  <Maximize2 size={12} />Ver la carpeta completa
+                </button>
+              </div>
+            )}
+            {n > 0 && n <= visible && (
+              <div className="flex items-center justify-center mb-2">
+                <button onClick={() => setFull(true)}
+                  className="inline-flex items-center gap-1.5 py-1 px-2.5 rounded-lg border text-[11px] font-semibold cursor-pointer bg-white hover:bg-[#F7F9FC]"
+                  style={{ borderColor: color + '44', color }}>
+                  <Maximize2 size={11} />Ver la carpeta completa
+                </button>
               </div>
             )}
             {items !== null && n === 0 && !busy && (
@@ -655,6 +819,110 @@ export default function FunnelResourceFolder({ strategyId, clientId, avatarId, b
             <Plus size={13} />Subir archivo
           </button>
         </div>
+      )}
+      {/* ── LA CARPETA COMPLETA ──────────────────────────────────────────────
+          Adentro del DEL la carpeta es un acordeón chico que muestra de a 10: sirve
+          para mirar de reojo, no para trabajar sobre 80 anuncios. Acá se abre entera,
+          con buscador por título y las mismas acciones en masa. No es una pantalla
+          aparte: es la misma carpeta, con lugar. Se cierra con Esc o con la X. */}
+      {full && createPortal(
+        <div className="fixed inset-0 z-[230] flex flex-col" style={{ background: 'rgba(10,22,40,.55)' }}
+          onClick={(e) => { if (e.target === e.currentTarget) setFull(false); }}>
+          <div className="m-auto w-full max-w-[1180px] h-[92vh] flex flex-col rounded-2xl bg-white overflow-hidden"
+            style={{ boxShadow: '0 24px 60px rgba(10,22,40,.28)' }} onClick={e => e.stopPropagation()}>
+            {/* Cabecera: dónde estoy (cliente › funnel › carpeta) + buscador + cerrar */}
+            <div className="flex items-center gap-2.5 py-3 px-4 border-b border-[#EDF0F5] shrink-0 flex-wrap">
+              <span className="inline-flex items-center justify-center w-7 h-7 rounded-lg shrink-0" style={{ background: bg, color }}><FolderOpen size={15} /></span>
+              <div className="min-w-0">
+                <div className="text-[13.5px] font-bold text-[#1A1D26] truncate">{label}</div>
+                <div className="text-[10.5px] text-[#9098A4] truncate">
+                  {clientScope ? 'Recursos del cliente' : `Este funnel${version > 1 ? ` · V${version}` : ''}`} · {n} elemento{n === 1 ? '' : 's'}
+                </div>
+              </div>
+              <div className="relative ml-auto min-w-[180px] max-w-[280px] flex-1">
+                <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#AEB4BF]" />
+                <input value={buscar} onChange={e => setBuscar(e.target.value)} placeholder="Buscar por título…"
+                  className="w-full text-[12px] py-1.5 pl-8 pr-3 rounded-lg border border-[#E2E5EB] outline-none focus:border-[#2E69E0] bg-white" />
+              </div>
+              <button onClick={() => setFull(false)} title="Cerrar (Esc)"
+                className="shrink-0 w-8 h-8 inline-flex items-center justify-center rounded-lg border border-[#E2E5EB] bg-white text-[#9098A4] cursor-pointer hover:text-[#1A1D26]"><X size={15} /></button>
+            </div>
+
+            {/* Acciones en masa, iguales a las de la carpeta chica */}
+            {selected.size > 0 && (
+              <div className="flex items-center gap-2 flex-wrap py-2 px-4 border-b border-[#EDF0F5] shrink-0" style={{ background: bg }}>
+                <span className="text-[11.5px] font-bold" style={{ color }}>{selected.size} seleccionada{selected.size === 1 ? '' : 's'}</span>
+                <button onClick={descargarSeleccion} disabled={!!bajando}
+                  className="flex items-center gap-1.5 text-[11px] font-bold rounded-md px-2.5 py-1.5 cursor-pointer border bg-white disabled:opacity-60"
+                  style={{ color, borderColor: `${color}55` }}><Download size={13} />Descargar</button>
+                {(() => {
+                  const elegidas = (items || []).filter(r => selected.has(r.id));
+                  const todasDest = elegidas.length > 0 && elegidas.every(r => r.destacada);
+                  return (
+                    <button onClick={() => destacarSeleccion(!todasDest)}
+                      className="flex items-center gap-1.5 text-[11px] font-bold rounded-md px-2.5 py-1.5 cursor-pointer border bg-white"
+                      style={{ color: '#2E69E0', borderColor: '#C7D2FE' }}>
+                      <Star size={13} fill={todasDest ? 'currentColor' : 'none'} />{todasDest ? 'Quitar destacado' : 'Destacar'}
+                    </button>
+                  );
+                })()}
+                <button onClick={borrarSeleccion} disabled={!!borrando}
+                  className="flex items-center gap-1.5 text-[11px] font-bold rounded-md px-2.5 py-1.5 cursor-pointer border bg-white text-[#DC2626] border-[#F5C2C2] hover:bg-[#FEF2F2] disabled:opacity-60">
+                  {borrando ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}Borrar
+                </button>
+                <button onClick={() => setSelected(new Set())} className="text-[11px] font-semibold text-[#9098A4] hover:text-[#6B7280] border-none bg-transparent cursor-pointer">Quitar selección</button>
+              </div>
+            )}
+            {bajando && (
+              <div className="flex items-center gap-2 flex-wrap py-2 px-4 border-b border-[#EDF0F5] shrink-0 bg-white">
+                <Loader2 size={13} className="animate-spin shrink-0" style={{ color }} />
+                <span className="text-[11.5px] font-semibold" style={{ color }}>
+                  {bajando.fase === 'zip' ? 'Armando el zip' : bajando.fase === 'video' ? 'Bajando videos' : 'Listo'} · {bajando.hechos} de {bajando.total}
+                </span>
+                {bajando.actual && <span className="text-[10.5px] text-[#9098A4] truncate max-w-[320px]">{bajando.actual}</span>}
+                <button onClick={() => bajando.ctrl?.abort()} className="ml-auto text-[11px] font-semibold text-[#9098A4] hover:text-[#DC2626] border-none bg-transparent cursor-pointer">Cancelar</button>
+              </div>
+            )}
+
+            {/* Grilla densa: acá entra todo, sin "cargar más" */}
+            <div className="flex-1 overflow-y-auto p-4 kx-scroll">
+              {n > 0 && (
+                <button
+                  onClick={() => setSelected(prev => (prev.size >= visibles.length ? new Set() : new Set(visibles.map(r => r.id))))}
+                  className="inline-flex items-center gap-1.5 text-[11.5px] font-semibold cursor-pointer border-none bg-transparent mb-2"
+                  style={{ color: selected.size >= visibles.length && visibles.length ? color : '#9098A4' }}>
+                  <span className="w-3.5 h-3.5 rounded-[4px] border inline-flex items-center justify-center shrink-0"
+                    style={{ borderColor: selected.size >= visibles.length && visibles.length ? color : '#C3C9D4', background: selected.size >= visibles.length && visibles.length ? color : '#fff' }}>
+                    {selected.size >= visibles.length && !!visibles.length && <Check size={10} strokeWidth={3} color="#fff" />}
+                  </span>
+                  {selected.size >= visibles.length && visibles.length ? 'Quitar selección' : `Seleccionar ${buscar ? 'lo que se ve' : 'todo'}`}
+                </button>
+              )}
+              {visibles.length === 0 ? (
+                <div className="text-[12px] text-[#AEB4BF] py-10 text-center">
+                  {buscar ? `Ningún recurso se llama así en “${label}”.` : 'Carpeta vacía.'}
+                </div>
+              ) : (
+                <div className="grid gap-2.5" style={{ gridTemplateColumns: 'repeat(auto-fill,minmax(150px,1fr))' }}>
+                  {visibles.map(r => (
+                    <Tile key={r.id} r={r} voomly={voomly} onOpenVoombly={onOpenVoombly} onBuscarVoomly={voomlyKind ? abrirPickerVoomly : undefined}
+                      selected={selected.has(r.id)} onToggleSelect={toggleSel} onDelete={borrar} onRename={renombrar}
+                      onOpen={setPreview} onVoomly={guardarVoomly} resolveDragIds={resolveDragIds}
+                      publicable={bucketKey === 'ad_edit' || bucketKey === 'vsl_edit'} onVisibleCliente={toggleVisibleCliente} onDestacar={destacar} />
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2 py-2.5 px-4 border-t border-[#EDF0F5] shrink-0">
+              <button onClick={() => fileRef.current?.click()} disabled={!!busy}
+                className="inline-flex items-center gap-1.5 py-1.5 px-3 rounded-lg border border-dashed text-[11.5px] font-semibold cursor-pointer disabled:opacity-60 bg-white"
+                style={{ borderColor: color + '66', color }}><Plus size={13} />Subir archivo</button>
+              <span className="text-[10.5px] text-[#AEB4BF] ml-auto">Las destacadas ★ y la favorita del cliente aparecen primero.</span>
+            </div>
+          </div>
+        </div>,
+        document.body,
       )}
       <ResourceLightbox r={preview} onClose={() => setPreview(null)} />
       {pickerFor && createPortal(
