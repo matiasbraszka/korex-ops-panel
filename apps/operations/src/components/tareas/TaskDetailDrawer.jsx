@@ -89,9 +89,11 @@ export default function TaskDetailDrawer({ taskId, onClose }) {
 
   // Tandas de checklist pre-armadas. Se configuran en Configuración › Checklists
   // de tareas; si todavía no hay ninguna guardada, se ofrece la de ejemplo.
+  // Una lista vacía es una decisión guardada ("no quiero ninguna"), no "falta
+  // configurar": solo se ofrece la de ejemplo mientras nadie tocó la configuración.
   const checklistTemplates = useMemo(() => {
     const fromDb = appSettings?.checklist_templates;
-    const list = Array.isArray(fromDb) && fromDb.length > 0 ? fromDb : DEFAULT_CHECKLIST_TEMPLATES;
+    const list = Array.isArray(fromDb) ? fromDb : DEFAULT_CHECKLIST_TEMPLATES;
     return list.filter(t => t && t.id && t.nombre && Array.isArray(t.items) && t.items.length > 0);
   }, [appSettings]);
   // Invitado ("mover y marcar"): la ficha queda de SOLO LECTURA para metadatos y

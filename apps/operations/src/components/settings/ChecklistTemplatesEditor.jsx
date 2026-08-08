@@ -25,9 +25,15 @@ export default function ChecklistTemplatesEditor() {
   // si otra sesión guarda una tanda, aparece sola. Apenas se toca algo, `edicion`
   // deja de ser null y pasa a mandar hasta que se guarde o se cancele.
   // (Derivarlo así en vez de sincronizar con un useEffect evita renders en cascada.)
+  //
+  // Ojo con la lista VACÍA: no es lo mismo que "nunca se configuró". Si se tratan
+  // igual, borrar la última tanda y guardar hace reaparecer la de ejemplo, y parece
+  // que el borrado no funcionó. Por eso solo se cae al ejemplo cuando la clave no
+  // existe todavía.
   const guardado = useMemo(() => {
     const next = appSettings?.checklist_templates;
-    return Array.isArray(next) && next.length > 0 ? next : DEFAULT_CHECKLIST_TEMPLATES;
+    if (Array.isArray(next)) return next;
+    return DEFAULT_CHECKLIST_TEMPLATES;
   }, [appSettings]);
   const [edicion, setEdicion] = useState(null);
   const draft = edicion ?? guardado;
@@ -46,15 +52,18 @@ export default function ChecklistTemplatesEditor() {
   };
 
   const handleSave = () => {
-    // Se descartan las tandas sin nombre o sin ningún ítem: cargar una tanda vacía
-    // en una tarea no haría nada y solo ensuciaría el desplegable.
+    // Se guarda lo que está en pantalla. Solo se descarta la fila COMPLETAMENTE vacía
+    // (sin nombre y sin ítems), que es la que queda al apretar "agregar tanda" y
+    // arrepentirse. Antes se tiraba también la que tuviera nombre pero todavía sin
+    // ítems, o ítems sin nombre: si estabas cargándola en dos pasos, el guardado se
+    // llevaba tu trabajo sin decir nada.
     const cleaned = draft
       .map((t) => ({
         id: t.id || mkId(),
         nombre: String(t.nombre || '').trim(),
         items: (Array.isArray(t.items) ? t.items : []).map((x) => String(x || '').trim()).filter(Boolean),
       }))
-      .filter((t) => t.nombre && t.items.length > 0);
+      .filter((t) => t.nombre || t.items.length > 0);
     updateAppSettings({ checklist_templates: cleaned });
     setEdicion(null);
   };
@@ -105,8 +114,11 @@ export default function ChecklistTemplatesEditor() {
                     onChange={(e) => updateAt(i, { nombre: e.target.value })}
                     placeholder="Nombre de la tanda (ej: Diseño de landings)"
                   />
-                  <span className="shrink-0 text-[10.5px] font-semibold text-gray-500 bg-white border border-gray-200 rounded-full py-0.5 px-2">
-                    {nItems} {nItems === 1 ? 'ítem' : 'ítems'}
+                  {/* Sin ítems se guarda igual (para poder cargarla en dos pasos), pero
+                      todavía no aparece en las tareas: mejor decirlo que sorprender. */}
+                  <span className={`shrink-0 text-[10.5px] font-semibold rounded-full py-0.5 px-2 border ${nItems ? 'text-gray-500 bg-white border-gray-200' : 'text-amber-700 bg-amber-50 border-amber-200'}`}
+                    title={nItems ? '' : 'Sin ítems todavía: se guarda, pero no aparece en las tareas hasta que le pongas al menos uno.'}>
+                    {nItems ? `${nItems} ${nItems === 1 ? 'ítem' : 'ítems'}` : 'sin ítems'}
                   </span>
                 </div>
                 <textarea
