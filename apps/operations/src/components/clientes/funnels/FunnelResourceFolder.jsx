@@ -191,7 +191,7 @@ function Tile({ r, voomly = false, onVoomly, onOpenVoombly, onBuscarVoomly, sele
   );
 }
 
-export default function FunnelResourceFolder({ strategyId, clientId, avatarId, bucketKey, label, color, bg, extra, by, accept = 'image/*,video/*', clientScope = false, version = 1, reloadTick = 0, onMoved, moveTargets, selfId, voomly = false, onOpenVoombly, voomlyKind, branding = false, onEditarCliente }) {
+export default function FunnelResourceFolder({ strategyId, clientId, avatarId, bucketKey, label, color, bg, extra, by, accept = 'image/*,video/*', clientScope = false, version = 1, reloadTick = 0, onMoved, moveTargets, selfId, voomly = false, onOpenVoombly, voomlyKind, branding = false, onEditarCliente, pool = null }) {
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState(null);   // null = sin cargar aún
   const [busy, setBusy] = useState(null);      // null | {done,total} mientras sube
@@ -298,7 +298,20 @@ export default function FunnelResourceFolder({ strategyId, clientId, avatarId, b
   // EN EL ORDEN en que están las miniaturas (P01→PNN, ya ordenado en `items`).
   const copiarTranscripts = async () => {
     const elegidos = (items || []).filter(r => selected.has(r.id));   // conserva el orden natural
-    const conTexto = elegidos.filter(r => r.transcript && String(r.transcript).trim());
+    if (!elegidos.length) return;
+    // Las transcripciones NO vienen con la lista: son 1,5 MB en la tabla y se
+    // arrastraban en cada apertura de carpeta para nada. Se piden acá, que es el
+    // único momento en que se usan.
+    let textos = {};
+    try {
+      const filas = await sbFetch(
+        `funnel_resources?select=id,transcript&id=in.(${elegidos.map(r => `"${r.id}"`).join(',')})`,
+      );
+      for (const f of (Array.isArray(filas) ? filas : [])) textos[f.id] = f.transcript;
+    } catch { textos = {}; }
+    const conTexto = elegidos
+      .map(r => ({ ...r, transcript: textos[r.id] }))
+      .filter(r => r.transcript && String(r.transcript).trim());
     if (!conTexto.length) { window.alert('Ninguno de los videos seleccionados tiene transcripción todavía.'); return; }
     const bloque = conTexto
       .map(r => `### ${r.title || 'Sin título'}\n\n${String(r.transcript).trim()}`)
@@ -322,9 +335,30 @@ export default function FunnelResourceFolder({ strategyId, clientId, avatarId, b
     ? `client_id=eq.${encodeURIComponent(clientId)}&strategy_id=is.null&avatar_id=is.null`
     : `strategy_id=eq.${encodeURIComponent(strategyId)}${clienteFiltro}&${avatarId ? `avatar_id=eq.${encodeURIComponent(avatarId)}` : 'avatar_id=is.null'}&version=eq.${version}`;
 
+  // ¿Esta fila del pool cae en ESTA carpeta? Son las mismas condiciones del filtro
+  // de arriba, pero aplicadas en memoria: el padre ya trajo todo el material del
+  // cliente de una sola vez y acá solo se reparte.
+  const esDeEstaCarpeta = (r) => {
+    if (r.bucket_key !== bucketKey) return false;
+    if (clientScope) return r.client_id === clientId && r.strategy_id == null && r.avatar_id == null;
+    if (r.strategy_id !== strategyId) return false;
+    if (clientId && r.client_id !== clientId) return false;
+    if (avatarId ? r.avatar_id !== avatarId : r.avatar_id != null) return false;
+    return (r.version ?? 1) === version;
+  };
+
   const cargar = async () => {
+    // Con pool no hay consulta: el padre ya trajo todo (ver FunnelsView). Se difiere
+    // un tick para no llamar a setState en seco dentro del efecto.
+    if (Array.isArray(pool)) {
+      await Promise.resolve();
+      setItems([...pool.filter(esDeEstaCarpeta)].sort(ordenCarpeta));
+      setSelected(new Set());
+      setVisible(10);
+      return;
+    }
     try {
-      const q = `funnel_resources?select=id,title,public_url,storage_path,kind,mime_type,size_bytes,created_at,provider,bunny_id,transcript,voomly_url,visible_cliente,favorita,destacada,meta&${scopeFilter}&bucket_key=eq.${encodeURIComponent(bucketKey)}&order=created_at.desc`;
+      const q = `funnel_resources?select=id,title,public_url,storage_path,kind,mime_type,size_bytes,created_at,provider,bunny_id,voomly_url,visible_cliente,favorita,destacada,meta&${scopeFilter}&bucket_key=eq.${encodeURIComponent(bucketKey)}&order=created_at.desc`;
       const rows = await sbFetch(q);
       // Primero lo destacado por el equipo, después la favorita que eligió el cliente,
       // y recién ahí el orden natural por título: "VSL P01…P10", "AD1…AD10", "G1…G10"
@@ -336,7 +370,7 @@ export default function FunnelResourceFolder({ strategyId, clientId, avatarId, b
     setSelected(new Set());
     setVisible(10);   // al recargar la carpeta, volvemos a mostrar los primeros 10
   };
-  useEffect(() => { cargar(); /* eslint-disable-next-line */ }, [strategyId, clientId, avatarId, bucketKey, clientScope, version, reloadTick]);
+  useEffect(() => { cargar(); /* eslint-disable-next-line */ }, [strategyId, clientId, avatarId, bucketKey, clientScope, version, reloadTick, pool]);
 
   const subir = async (fileList) => {
     const files = Array.from(fileList || []);
@@ -383,6 +417,7 @@ export default function FunnelResourceFolder({ strategyId, clientId, avatarId, b
     }
     setBusy(null);
     if (fileRef.current) fileRef.current.value = '';
+    onMoved?.();   // el pool del padre quedó viejo: que lo vuelva a traer
   };
 
   // Borra el recurso. Si es algo generado, se lleva TODO su grupo: un logo son 3 archivos (color,
@@ -408,6 +443,7 @@ export default function FunnelResourceFolder({ strategyId, clientId, avatarId, b
     await supabase.from('funnel_resources').delete().in('id', ids);
 
     if (bucketKey === 'branding' && clientScope) await revisarPaletaUnica();
+    onMoved?.();
   };
 
   // Cuando en Branding queda UNA sola paleta, esa es la elegida: se guarda en la ficha del
@@ -496,6 +532,7 @@ export default function FunnelResourceFolder({ strategyId, clientId, avatarId, b
       if (bucketKey === 'branding' && clientScope) await revisarPaletaUnica();
     } finally {
       setBorrando(null);
+      onMoved?.();
     }
   };
 
@@ -698,7 +735,9 @@ export default function FunnelResourceFolder({ strategyId, clientId, avatarId, b
                   </select>
                 );
               })()}
-              {(items || []).some(r => selected.has(r.id) && r.transcript && String(r.transcript).trim()) && (
+              {/* Se ofrece si hay algún VIDEO elegido: si ninguno tiene transcripción
+                  todavía, el botón lo dice al apretarlo (ya no viaja el texto en la lista). */}
+              {(items || []).some(r => selected.has(r.id) && r.kind === 'video') && (
                 <button onClick={copiarTranscripts}
                   className="flex items-center gap-1.5 text-[11px] font-bold rounded-md px-2.5 py-1.5 cursor-pointer border"
                   style={copied ? { background: '#ECFDF5', color: '#16A34A', borderColor: '#A7F3D0' } : { background: '#fff', color, borderColor: `${color}55` }}>

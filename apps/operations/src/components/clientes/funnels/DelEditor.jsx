@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { Loader2, AlertCircle, FileText, ExternalLink, Plus, Trash2, Check, Pencil, Eye, PenLine, Link2, Image as ImageIcon, Monitor, MessageSquare, Send, Lock, X,
   Bold, Italic, Underline as UnderlineIcon, Heading1, Heading2, Heading3, List, ListOrdered, ListChecks, Table, UserPlus, Eraser, Baseline, FolderInput, LayoutTemplate,
-  Highlighter, AlignLeft, AlignCenter, AlignRight, Share2, Copy, Menu, HelpCircle, PaintBucket, PanelLeft, PanelLeftClose, Minus, ChevronRight, ChevronLeft, FolderDown } from 'lucide-react';
+  Highlighter, AlignLeft, AlignCenter, AlignRight, Share2, Copy, Menu, HelpCircle, PaintBucket, PanelLeft, PanelLeftClose, Minus, ChevronRight, ChevronLeft, FolderDown, RotateCcw } from 'lucide-react';
 import { sbFetch, supabase } from '@korex/db';
 import { useApp } from '../../../context/AppContext';
 import RichTextEditor from '../../notas/RichTextEditor';
@@ -440,7 +440,8 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, sibling
 
   useEffect(() => {
     if (!aviso) return undefined;
-    const t = setTimeout(() => setAviso(null), 4000);
+    // Los que traen "Deshacer" duran más: hay que leerlos y decidir, no solo verlos.
+    const t = setTimeout(() => setAviso(null), typeof aviso === 'string' ? 4000 : 8000);
     return () => clearTimeout(t);
   }, [aviso]);
 
@@ -1389,15 +1390,32 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, sibling
     onAvatarCreate?.(nom); // registra el avatar en el funnel + crea las carpetas del Drive
   };
 
+  // Borrar una sección. Ya NO pregunta: el borrado se puede deshacer durante unos
+  // segundos desde el mensajito de abajo, que es más útil que un cartel que se
+  // aprieta sin leer. La fila entera queda guardada en la papelera por trigger.
   const borrar = async (s) => {
-    if (!window.confirm(`¿Borrar la sección "${s.title}"? No se puede deshacer.`)) return;
     const { error } = await supabase.rpc('del_section_delete', { p_id: s.id, p_by: by });
     if (error) { window.alert('No pude borrar: ' + error.message); return; }
     setSecs((prev) => prev.filter(x => x.id !== s.id));
     emitir('section-del', { id: s.id });
+    setAviso({ texto: `Borraste "${s.title}"`, deshacer: () => restaurarSeccion(s) });
     // Si era la última de su categoría, la base ya sacó ese paso de la versión:
     // hay que releer la ficha para que el menú deje de dibujarlo vacío.
     await cargarVersiones();
+  };
+
+  // Deshacer el borrado: la fila vuelve tal cual estaba (texto, categoría, versión y
+  // su paso en el embudo). La saca de papelera_borrados, donde el trigger la guardó.
+  const restaurarSeccion = async (s) => {
+    const { data, error } = await supabase.rpc('del_section_restaurar', { p_id: s.id });
+    if (error || !data?.ok) {
+      window.alert('No pude recuperarla' + (data?.error ? ': ' + data.error : '') + '.');
+      return;
+    }
+    await cargar();
+    await cargarVersiones();
+    emitir('section-add', {});
+    setAviso(`Recuperada "${s.title}"`);
   };
 
   const renombrar = async (id, title) => {
@@ -1531,19 +1549,25 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, sibling
     if (error) { window.alert('No pude agregar el paso: ' + error.message); return; }
     await cargarVersiones();
   };
+  // Sacar un paso no borra nada (la base se niega si la categoría tiene contenido),
+  // así que en vez de un cartel va el "Deshacer" de abajo.
   const quitarPaso = async (kind) => {
     if (!resolvedDoc || !kind) return;
     const sc = secOf(kind);
-    if (!window.confirm(
-      `¿Este embudo deja de llevar "${sc.label}" en la V${verActiva}?\n\n`
-      + `Se saca del documento y de lo que ve el cliente. No se borra nada de lo demás, `
-      + `y lo podés volver a agregar cuando quieras.`)) return;
-    const actuales = groups.map(g => g.kind).filter(k => STANDARD_KINDS.includes(k) && k !== kind);
+    const antes = groups.map(g => g.kind).filter(k => STANDARD_KINDS.includes(k));
     const { error } = await supabase.rpc('del_version_set_pasos', {
-      p_doc_id: resolvedDoc, p_version: verActiva, p_pasos: actuales,
+      p_doc_id: resolvedDoc, p_version: verActiva, p_pasos: antes.filter(k => k !== kind),
     });
     if (error) { window.alert(error.message); return; }
     await cargarVersiones();
+    const v = verActiva;
+    setAviso({
+      texto: `La V${v} ya no lleva ${sc.label}`,
+      deshacer: async () => {
+        await supabase.rpc('del_version_set_pasos', { p_doc_id: resolvedDoc, p_version: v, p_pasos: antes });
+        await cargarVersiones();
+      },
+    });
   };
 
   // Título y nota de una versión ya creada.
@@ -2931,12 +2955,24 @@ export default function DelEditor({ strategyId, docId, docUrl, clientId, sibling
         </div>
       )}
 
-      {aviso && (
-        <div className="fixed left-1/2 bottom-6 z-[60] -translate-x-1/2 flex items-center gap-2 py-2 px-3.5 rounded-lg text-[12px] font-semibold"
-          style={{ background: '#15803D', color: '#fff', boxShadow: '0 8px 24px rgba(10,22,40,.22)' }}>
-          <Check size={13} strokeWidth={3} />{aviso}
-        </div>
-      )}
+      {/* Mensajito de abajo. Cuando la acción se puede deshacer, trae el botón: es la
+          red de seguridad del borrado, y dura lo que dura el aviso (8 segundos). */}
+      {aviso && (() => {
+        const texto = typeof aviso === 'string' ? aviso : aviso.texto;
+        const undo = typeof aviso === 'string' ? null : aviso.deshacer;
+        return (
+          <div className="fixed left-1/2 bottom-6 z-[60] -translate-x-1/2 flex items-center gap-2.5 py-2 px-3.5 rounded-lg text-[12px] font-semibold"
+            style={{ background: undo ? '#1A1D26' : '#15803D', color: '#fff', boxShadow: '0 8px 24px rgba(10,22,40,.22)' }}>
+            {!undo && <Check size={13} strokeWidth={3} />}{texto}
+            {undo && (
+              <button onClick={() => { setAviso(null); undo(); }}
+                className="inline-flex items-center gap-1 py-1 px-2.5 rounded-md border-none bg-white/15 hover:bg-white/25 text-white text-[11.5px] font-bold cursor-pointer">
+                <RotateCcw size={12} />Deshacer
+              </button>
+            )}
+          </div>
+        );
+      })()}
     </div>
   );
 }

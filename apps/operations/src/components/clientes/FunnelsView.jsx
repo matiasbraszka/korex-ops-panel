@@ -563,6 +563,26 @@ function FunnelRow({ f, stages, delText = '', delDocUrl = '', delDocId = '', cli
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [forcePage, f.id]);
   const [clientResTick, setClientResTick] = useState(0); // sube al mover un recurso → recarga todas las carpetas
+
+  // TODO el material del cliente en UNA sola consulta, que después cada carpeta filtra.
+  //
+  // Antes cada carpeta pedía lo suyo por separado: abrir un funnel con 3 avatares
+  // disparaba 20 consultas (11 del cliente + 2 por avatar + 2 del VSL + testimonios).
+  // La base las contesta en menos de un milisegundo cada una, pero cada ida y vuelta
+  // a Supabase cuesta ~180 ms de red: por eso el funnel tardaba segundos en aparecer.
+  // Traer todo junto es UNA vuelta.
+  //
+  // No se pide `transcript`: son 1,5 MB en la tabla y solo se usa al apretar
+  // "Copiar transcripciones", que ahora lo busca en ese momento.
+  const [poolRecursos, setPoolRecursos] = useState(null);
+  useEffect(() => {
+    if (!clientId) return undefined;
+    let vivo = true;
+    sbFetch(`funnel_resources?select=id,title,public_url,storage_path,kind,mime_type,size_bytes,created_at,provider,bunny_id,voomly_url,visible_cliente,favorita,destacada,meta,client_id,strategy_id,avatar_id,bucket_key,version&client_id=eq.${encodeURIComponent(clientId)}&limit=5000`)
+      .then((rows) => { if (vivo) setPoolRecursos(Array.isArray(rows) ? rows : []); })
+      .catch(() => { if (vivo) setPoolRecursos([]); });
+    return () => { vivo = false; };
+  }, [clientId, clientResTick]);
   const st = FUNNEL_STATUS[f.status] || FUNNEL_STATUS.activa;
   const avatars = Array.isArray(f.avatars) ? f.avatars : [];
   const events = normEvents(f.conversion_events);
@@ -959,7 +979,7 @@ Quedo a la espera de tu respuesta`;
                     <div key={b.key} {...(i === 0 && v === recVers[0] ? { 'data-res': b.key } : {})} className="rounded-lg">
                       <FunnelResourceFolder strategyId={f.strategy_id} clientId={clientId} avatarId={av.id}
                         bucketKey={b.key} version={v} label={b.label} color={b.c} bg={b.bg} by={meId} voomly={!!b.voomly}
-                        moveTargets={moveTargets} selfId={`f:${av.id}:${v}:${b.key}`} reloadTick={clientResTick} onMoved={() => setClientResTick(t => t + 1)}
+                        moveTargets={moveTargets} selfId={`f:${av.id}:${v}:${b.key}`} reloadTick={clientResTick} pool={poolRecursos} onMoved={() => setClientResTick(t => t + 1)}
                         extra={b.voomly ? <span className="text-[9.5px] font-bold py-0.5 px-1.5 rounded-full" style={{ background: '#FDF2F8', color: '#DB2777' }}>Voomly</span> : null} />
                     </div>
                   ))}
@@ -994,7 +1014,7 @@ Quedo a la espera de tu respuesta`;
                     <div key={b.key} {...(v === vslVers[0] ? { 'data-res': b.key } : {})} className="rounded-lg">
                       <FunnelResourceFolder strategyId={f.strategy_id} clientId={clientId} avatarId={null}
                         bucketKey={b.key} version={v} label={b.label} color={b.c} bg={b.bg} by={meId} voomly={!!b.voomly} onOpenVoombly={() => setVoomlyOpen(true)}
-                        moveTargets={moveTargets} selfId={`f:vsl:${v}:${b.key}`} reloadTick={clientResTick} onMoved={() => setClientResTick(t => t + 1)}
+                        moveTargets={moveTargets} selfId={`f:vsl:${v}:${b.key}`} reloadTick={clientResTick} pool={poolRecursos} onMoved={() => setClientResTick(t => t + 1)}
                         extra={b.voomly ? <span className="text-[9.5px] font-bold py-0.5 px-1.5 rounded-full" style={{ background: '#FDF2F8', color: '#DB2777' }}>Voomly</span> : null} />
                     </div>
                   ))}
@@ -1019,7 +1039,7 @@ Quedo a la espera de tu respuesta`;
           <FunnelResourceFolder strategyId={f.strategy_id} clientId={clientId} bucketKey="testimonios"
             label="Testimonios" color="#DB2777" bg="#FDF2F8" by={meId} voomly voomlyKind="Testimonio"
             extra={<span className="text-[9.5px] font-bold py-0.5 px-1.5 rounded-full" style={{ background: '#FDF2F8', color: '#DB2777' }}>Voomly</span>}
-            moveTargets={moveTargets} selfId="f:testimonios" reloadTick={clientResTick} onMoved={() => setClientResTick(t => t + 1)} />
+            moveTargets={moveTargets} selfId="f:testimonios" reloadTick={clientResTick} pool={poolRecursos} onMoved={() => setClientResTick(t => t + 1)} />
         </div>
       </div>
 
@@ -1040,7 +1060,7 @@ Quedo a la espera de tu respuesta`;
               <FunnelResourceFolder clientScope clientId={clientId} bucketKey={cat.key}
                 label={cat.label} color={cat.c} bg={cat.bg} by={meId} moveTargets={moveTargets} selfId={`c:${cat.key}`}
                 {...((cat.key === 'testimonios' || cat.key === 'testimonios_korex') ? { voomly: true, voomlyKind: 'Testimonio' } : {})}
-                reloadTick={clientResTick} onMoved={() => setClientResTick(t => t + 1)}
+                reloadTick={clientResTick} pool={poolRecursos} onMoved={() => setClientResTick(t => t + 1)}
                 // Branding es la única con botón de generar: la IA arma logos y paletas y los deja
                 // acá mismo. onEditarCliente es lo que hace usable el error de datos faltantes —
                 // sin eso, "completá la tarjeta del cliente" obliga a salir y volver a navegar.
