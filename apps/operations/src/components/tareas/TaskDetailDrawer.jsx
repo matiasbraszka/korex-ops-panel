@@ -1,6 +1,6 @@
 import { useMemo, useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { X, Plus, Trash2, MessageSquare, Lock, RotateCcw, Clock, AlignLeft, ListChecks, ClipboardCheck, Check, Send, GripVertical, Zap, FileText, LayoutGrid } from 'lucide-react';
+import { X, Plus, Trash2, MessageSquare, Lock, RotateCcw, Clock, AlignLeft, ListChecks, ClipboardCheck, Check, Send, GripVertical, Zap, FileText, LayoutGrid, Settings } from 'lucide-react';
 import { sbFetch } from '@korex/db';
 import { useApp } from '../../context/AppContext';
 import { setCfgJump } from '../clientes/funnels/cfgJump';
@@ -443,15 +443,25 @@ export default function TaskDetailDrawer({ taskId, onClose }) {
                   <input value={newItem} onChange={(e) => setNewItem(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addItem(); } }} placeholder="Agregar subtarea…" style={inputStyle} />
                   <button onClick={addItem} style={addBtnStyle}><Plus size={16} /></button>
                 </div>
-                {/* Tandas pre-armadas (Configuración › Checklists de tareas): cargan varias
-                    subtareas de una. Se AGREGAN al final — nunca pisan lo que ya está. */}
-                {checklistTemplates.length > 0 && (
-                  <select value="" onChange={(e) => { cargarTanda(e.target.value); e.target.value = ''; }}
-                    style={{ width: '100%', marginTop: 8, fontSize: 12, color: '#6B7280', border: '1px dashed #D0D5DD', borderRadius: 9, padding: '10px 11px', outline: 'none', background: '#FAFBFC', cursor: 'pointer', fontFamily: 'inherit' }}>
-                    <option value="">+ Cargar una tanda pre-armada…</option>
-                    {checklistTemplates.map(t => <option key={t.id} value={t.id}>{t.nombre} · {(t.items || []).length} ítems</option>)}
-                  </select>
-                )}
+                {/* Tandas pre-armadas: cargan varias subtareas de una. Se AGREGAN al
+                    final — nunca pisan lo que ya está. Se crean y se editan en
+                    Configuración › Checklists de tareas, y el link va SIEMPRE: sin él,
+                    quien no tenga ninguna cargada no tiene forma de saber que existen
+                    ni dónde armarlas. */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
+                  {checklistTemplates.length > 0 && (
+                    <select value="" onChange={(e) => { cargarTanda(e.target.value); e.target.value = ''; }}
+                      style={{ flex: 1, minWidth: 0, fontSize: 12, color: '#6B7280', border: '1px dashed #D0D5DD', borderRadius: 9, padding: '10px 11px', outline: 'none', background: '#FAFBFC', cursor: 'pointer', fontFamily: 'inherit' }}>
+                      <option value="">+ Cargar una tanda pre-armada…</option>
+                      {checklistTemplates.map(t => <option key={t.id} value={t.id}>{t.nombre} · {(t.items || []).length} ítems</option>)}
+                    </select>
+                  )}
+                  <button onClick={() => { onClose(); navigate('/admin/settings'); }}
+                    title="Crear, editar o borrar tandas (Configuración › Checklists de tareas)"
+                    style={{ flex: checklistTemplates.length ? 'none' : 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, height: 39, padding: '0 11px', fontSize: 12, fontWeight: 600, color: '#6B7280', border: '1px dashed #D0D5DD', borderRadius: 9, background: '#FAFBFC', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
+                    <Settings size={13} />{checklistTemplates.length ? 'Administrar' : 'Crear tandas de checklist'}
+                  </button>
+                </div>
               </div>
             </div>
           )}
